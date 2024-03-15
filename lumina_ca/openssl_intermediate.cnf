@@ -1,0 +1,76 @@
+[ ca ]                           # The default CA section
+default_ca = CA_default          # The default CA name
+
+[ CA_default ]                                           # Default settings for the intermediate CA
+dir               = ./intermediateCA                     # Intermediate CA directory
+certs             = $dir/certs                           # Certificates directory
+crl_dir           = $dir/crl                             # CRL directory
+new_certs_dir     = $dir/newcerts                        # New certificates directory
+database          = $dir/index.txt                       # Certificate index file
+serial            = $dir/serial                          # Serial number file
+RANDFILE          = $dir/private/.rand                   # Random number file
+private_key       = $dir/private/intermediate.key.pem    # Intermediate CA private key
+certificate       = $dir/certs/intermediate.cert.pem     # Intermediate CA certificate
+crl               = $dir/crl/intermediate.crl.pem        # Intermediate CA CRL
+crlnumber         = $dir/crlnumber                       # Intermediate CA CRL number
+crl_extensions    = crl_ext                              # CRL extensions
+default_crl_days  = 30                                   # Default CRL validity days
+default_md        = sha512                               # Default message digest
+preserve          = no                                   # Preserve existing extensions
+email_in_dn       = no                                   # Exclude email from the DN
+name_opt          = ca_default                           # Formatting options for names
+cert_opt          = ca_default                           # Certificate output options
+policy            = policy_loose                         # Certificate policy
+unique_subject    = no                                   # Allow multiple certs with the same DN
+x509_extensions   = v3_intermediate_ca                 # Extensions for intermediate CA certificate
+
+[ policy_loose ]                                         # Policy for less strict validation
+countryName             = optional                       # Country is optional
+stateOrProvinceName     = optional                       # State or province is optional
+localityName            = optional                       # Locality is optional
+organizationName        = optional                       # Organization is optional
+organizationalUnitName  = optional                       # Organizational unit is optional
+commonName              = supplied                       # Must provide a common name
+emailAddress            = optional                       # Email address is optional
+
+[ req ]                                                  # Request settings
+default_bits        = 4096                               # Default key size
+distinguished_name  = req_distinguished_name             # Default DN template
+string_mask         = utf8only                           # UTF-8 encoding
+default_md          = sha512                             # Default message digest
+prompt              = no                                 # Non-interactive mode
+x509_extensions     = v3_intermediate_ca                 # Extensions for intermediate CA certificate
+
+[ req_distinguished_name ]                               # Template for the DN in the CSR
+countryName                     = BE
+countryName_default             = BE
+#stateOrProvinceName             = State or Province Name
+localityName                    = Liège
+localityName_default            = Liège
+0.organizationName              = Hex-Rays SA.
+0.organizationName_default      = Hex-Rays SA.
+#organizationalUnitName          = Organizational Unit Name
+commonName                      = Hex-Rays SA. Intermediate CA 2
+commonName_default              = Hex-Rays SA. Intermediate CA 2
+#emailAddress                    = Email Address
+
+[ v3_intermediate_ca ]                                      # Intermediate CA certificate extensions
+#subjectKeyIdentifier = hash                                 # Subject key identifier
+authorityKeyIdentifier = keyid:always                       # Authority key identifier
+basicConstraints = critical, CA:true, pathlen:0             # Basic constraints for a CA
+keyUsage = critical, digitalSignature, cRLSign, keyCertSign # Key usage for a CA
+crlDistributionPoints = crldp1_section
+
+[crldp1_section]
+fullname = URI:http://crl.hex-rays.com/intermediate_ca_2.crl
+
+[ crl_ext ]                                                 # CRL extensions
+authorityKeyIdentifier=keyid:always                         # Authority key identifier
+
+[ server_cert ]                                             # Server certificate extensions
+#nsCertType = server                                         # Server certificate type
+#keyUsage = critical, digitalSignature, keyEncipherment      # Key usage for a server cert
+extendedKeyUsage = critical, serverAuth                     # Extended key usage for server authentication purposes (e.g., TLS/SSL servers).
+basicConstraints = critical, CA:FALSE                       # Not a CA certificate
+authorityKeyIdentifier = keyid                              # Authority key identifier linking the certificate to the issuer's public key.
+subjectKeyIdentifier = none                                 # Subject key identifier
