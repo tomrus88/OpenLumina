@@ -23,7 +23,7 @@ cat ./intermediateCA/certs/intermediate.cert.pem ./rootCA/certs/ca.cert.pem > ./
 openssl verify -CAfile ./intermediateCA/certs/ca-chain.cert.pem ./intermediateCA/certs/intermediate.cert.pem
 openssl ecparam -name prime256v1 -genkey -out ./intermediateCA/private/vault.hex-rays.com.key.pem
 openssl req -config openssl_lumina.cnf -key ./intermediateCA/private/vault.hex-rays.com.key.pem -utf8 -new -sha256 -out ./intermediateCA/csr/vault.hex-rays.com.csr.pem -batch
-openssl ca -config openssl_intermediate.cnf -extensions server_cert -days 375 -utf8 -notext -md sha256 -in ./intermediateCA/csr/vault.hex-rays.com.csr.pem -out ./intermediateCA/certs/vault.hex-rays.com.cert.pem -batch
+openssl ca -config openssl_intermediate.cnf -extensions server_cert -days 1825 -utf8 -notext -md sha256 -in ./intermediateCA/csr/vault.hex-rays.com.csr.pem -out ./intermediateCA/certs/vault.hex-rays.com.cert.pem -batch
 openssl x509 -noout -text -in ./intermediateCA/certs/vault.hex-rays.com.cert.pem
 openssl verify -CAfile ./intermediateCA/certs/ca-chain.cert.pem ./intermediateCA/certs/vault.hex-rays.com.cert.pem
 cat ./intermediateCA/certs/vault.hex-rays.com.cert.pem ./intermediateCA/certs/intermediate.cert.pem > ./intermediateCA/certs/vault.hex-rays.com.chain.cert.pem
