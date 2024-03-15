@@ -47,7 +47,7 @@ countryName                     = BE
 localityName                    = Liège
 0.organizationName              = Hex-Rays SA.
 #organizationalUnitName          = Organizational Unit Name
-commonName                      = Hex-Rays SA. Intermediate CA 2
+commonName                      = vault.hex-rays.com
 #emailAddress                    = Email Address
 
 [ v3_intermediate_ca ]                                      # Intermediate CA certificate extensions
