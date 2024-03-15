@@ -14,6 +14,7 @@ IDA plugin that allows connecting to third party Lumina servers.
 3. Install Microsoft Detours package through vcpkg `vcpkg install detours`
 4. Configure paths to your extracted IDA SDK directory and optionally your IDA install directory in PropertySheet.props file
 5. Open OpenLumina.sln in Visual Studio and build the plugin
+6. Copy compiled plugin binaries to your IDA\plugins directory if you haven't configured your IDA install directory in step 4 above
 
 ## Generating TLS certificates for your own Lumina server
 
