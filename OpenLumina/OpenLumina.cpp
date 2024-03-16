@@ -4,7 +4,7 @@
 #define PLUGIN_DESC		"Allows IDA to connect to third party Lumina servers"
 #define PLUGIN_PREFIX	"OpenLumina: "
 
-void load_and_decode_certificate(bytevec_t* buffer, const char* certFilePath)
+bool load_and_decode_certificate(bytevec_t* buffer, const char* certFilePath)
 {
     auto certFile = fopenRT(certFilePath);
 
@@ -33,9 +33,9 @@ void load_and_decode_certificate(bytevec_t* buffer, const char* certFilePath)
         if ((debug & IDA_DEBUG_LUMINA) != 0)
             msg(PLUGIN_PREFIX "cert read: %s\n", cert.c_str());
 
-        if (!base64_decode(buffer, cert.c_str(), cert.length()))
-            buffer->resize(0);
+        return base64_decode(buffer, cert.c_str(), cert.length());
     }
+    return false;
 }
 
 static plugin_ctx_t* s_plugin_ctx = nullptr;
@@ -85,9 +85,7 @@ bool plugin_ctx_t::init_hook()
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "using certificate file \"%s\"\n", certFileName);
 
-    load_and_decode_certificate(&decodedCert, certFileName);
-
-    if (decodedCert.size() == 0)
+    if (!load_and_decode_certificate(&decodedCert, certFileName))
     {
         msg(PLUGIN_PREFIX "failed to decode certificate file!\n");
         return false;
@@ -125,6 +123,7 @@ static plugmod_t* idaapi init()
     if (!ctx->init_hook())
     {
         msg(PLUGIN_PREFIX "plugin init_hook failed!\n");
+        delete ctx;
         return nullptr;
     }
 

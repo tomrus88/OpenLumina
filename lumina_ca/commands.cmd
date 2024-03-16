@@ -39,6 +39,7 @@ copy /b intermediateCA\certs\vault.hex-rays.com.cert.pem + intermediateCA\certs\
 openssl verify -CAfile ./intermediateCA/certs/ca-chain.cert.pem ./intermediateCA/certs/vault.hex-rays.com.chain.cert.pem
 mkdir out
 copy rootCA\certs\ca.cert.pem out\hexrays.crt
+copy intermediateCA\certs\intermediate.cert.pem out\intermediate.crt
 copy intermediateCA\certs\vault.hex-rays.com.chain.cert.pem out\lumina.crt
 copy intermediateCA\private\vault.hex-rays.com.key.pem out\lumina.key
 openssl pkcs12 -export -inkey ./intermediateCA/private/vault.hex-rays.com.key.pem -in ./intermediateCA/certs/vault.hex-rays.com.chain.cert.pem -out out/lumen.p12
