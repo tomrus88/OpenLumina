@@ -61,6 +61,7 @@ static BOOL WINAPI HookedCertAddEncodedCertificateToStore(HCERTSTORE hCertStore,
         }
     }
 
+    // continue adding official root certificate to certificate store 
     return TrueCertAddEncodedCertificateToStore(hCertStore, dwCertEncodingType, pbCertEncoded, cbCertEncoded, dwAddDisposition, ppCertContext);
 }
 
