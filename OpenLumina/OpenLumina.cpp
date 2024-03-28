@@ -4,46 +4,12 @@
 #define PLUGIN_DESC		"Allows IDA to connect to third party Lumina servers"
 #define PLUGIN_PREFIX	"OpenLumina: "
 
-#undef __NT__
-#define __LINUX__ 1
+static plugin_ctx_t* s_plugin_ctx = nullptr;
 
-bool load_certificate(qstring& buffer, const char* certFilePath)
-{
-    auto certFile = fopenRT(certFilePath);
+//#undef __NT__
+//#define __LINUX__ 1
 
-    if (certFile != nullptr)
-    {
-        qstring line;
-        bool hasHeader = false, hasFooter = false;
-
-        if (qgetline(&line, certFile) >= 0)
-        {
-            do
-            {
-                if (strcmp(line.c_str(), "-----BEGIN CERTIFICATE-----") == 0)
-                    hasHeader = true;
-
-                if (strcmp(line.c_str(), "-----END CERTIFICATE-----") == 0)
-                    hasFooter = true;
-
-                if (line.length())
-                {
-                    buffer += line;
-                    buffer += "\n";
-                }
-            } while (qgetline(&line, certFile) >= 0);
-        }
-
-        qfclose(certFile);
-
-        //if ((debug & IDA_DEBUG_LUMINA) != 0)
-            msg(PLUGIN_PREFIX "load_certificate: %s\n", buffer.c_str());
-
-        return hasHeader && hasFooter;
-    }
-    return false;
-}
-
+#if __NT__
 bool load_and_decode_certificate(bytevec_t& buffer, const char* certFilePath)
 {
     auto certFile = fopenRT(certFilePath);
@@ -78,9 +44,6 @@ bool load_and_decode_certificate(bytevec_t& buffer, const char* certFilePath)
     return false;
 }
 
-static plugin_ctx_t* s_plugin_ctx = nullptr;
-
-#if __NT__
 static BOOL(WINAPI* CertAddEncodedCertificateToStore_orig)(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext) = CertAddEncodedCertificateToStore;
 
 static BOOL WINAPI CertAddEncodedCertificateToStore_hook(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext)
@@ -131,14 +94,51 @@ static BOOL WINAPI CertAddEncodedCertificateToStore_hook2(HCERTSTORE hCertStore,
 #endif
 
 #if __LINUX__
+bool load_certificate(qstring& buffer, const char* certFilePath)
+{
+    auto certFile = fopenRT(certFilePath);
+
+    if (certFile != nullptr)
+    {
+        qstring line;
+        bool hasHeader = false, hasFooter = false;
+
+        if (qgetline(&line, certFile) >= 0)
+        {
+            do
+            {
+                if (strcmp(line.c_str(), "-----BEGIN CERTIFICATE-----") == 0)
+                    hasHeader = true;
+
+                if (strcmp(line.c_str(), "-----END CERTIFICATE-----") == 0)
+                    hasFooter = true;
+
+                if (line.length())
+                {
+                    buffer += line;
+                    buffer += "\n";
+                }
+            } while (qgetline(&line, certFile) >= 0);
+        }
+
+        qfclose(certFile);
+
+        if ((debug & IDA_DEBUG_LUMINA) != 0)
+            msg(PLUGIN_PREFIX "load_certificate: %s\n", buffer.c_str());
+
+        return hasHeader && hasFooter;
+    }
+    return false;
+}
+
 typedef int (*X509_STORE_add_cert_fptr)(X509_STORE* ctx, X509* x);
 
 static X509_STORE_add_cert_fptr X509_STORE_add_cert_orig = nullptr;
 
 int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
 {
-    //if ((debug & IDA_DEBUG_LUMINA) != 0)
-    msg(PLUGIN_PREFIX "X509_STORE_add_cert_hook: %p %p\n", ctx, x);
+    if ((debug & IDA_DEBUG_LUMINA) != 0)
+        msg(PLUGIN_PREFIX "X509_STORE_add_cert_hook: %p %p\n", ctx, x);
 
     if (s_plugin_ctx->pemCert.length() != 0)
     {
@@ -155,7 +155,7 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
         }
         else
         {
-            //if ((debug & IDA_DEBUG_LUMINA) != 0)
+            if ((debug & IDA_DEBUG_LUMINA) != 0)
                 msg(PLUGIN_PREFIX "added our root certificate to certificate store\n");
         }
 
@@ -168,22 +168,23 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
 
 void* dlopen_hook(const char* filename, int flags)
 {
-    //if ((debug & IDA_DEBUG_LUMINA) != 0)
-    msg(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
+    if ((debug & IDA_DEBUG_LUMINA) != 0)
+        msg(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
     return dlopen(filename, flags);
 }
 
 void* dlsym_hook(void* handle, const char* symbol)
 {
-    //if ((debug & IDA_DEBUG_LUMINA) != 0)
-    msg(PLUGIN_PREFIX "dlsym_hook: %p %s\n", handle, symbol);
+    if ((debug & IDA_DEBUG_LUMINA) != 0)
+        msg(PLUGIN_PREFIX "dlsym_hook: %p %s\n", handle, symbol);
 
     void *addr = dlsym(handle, symbol);
 
     if (addr != nullptr && strcmp(symbol, "X509_STORE_add_cert") == 0)
     {
         X509_STORE_add_cert_orig = (X509_STORE_add_cert_fptr)addr;
-        msg(PLUGIN_PREFIX "returned %p for X509_STORE_add_cert\n", (void*)X509_STORE_add_cert_hook);
+        if ((debug & IDA_DEBUG_LUMINA) != 0)
+            msg(PLUGIN_PREFIX "returned %p for X509_STORE_add_cert\n", (void*)X509_STORE_add_cert_hook);
         return (void*)X509_STORE_add_cert_hook;
     }
 
