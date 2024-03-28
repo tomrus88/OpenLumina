@@ -123,7 +123,7 @@ void* dlsym_hook(void* handle, const char* symbol)
     {
         X509_STORE_add_cert_orig = (X509_STORE_add_cert_fptr)addr;
         msg(PLUGIN_PREFIX "returned %p for X509_STORE_add_cert", X509_STORE_add_cert_hook);
-        return X509_STORE_add_cert_hook;
+        return (void*)X509_STORE_add_cert_hook;
     }
 
     return addr;
