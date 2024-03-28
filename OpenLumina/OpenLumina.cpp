@@ -119,7 +119,7 @@ void* dlsym_hook(void* handle, const char* symbol)
 
     void *addr = dlsym(handle, symbol);
 
-    if (addr != nullptr && strcmp(symbol, "X509_STORE_add_cert"))
+    if (addr != nullptr && strcmp(symbol, "X509_STORE_add_cert") == 0)
     {
         X509_STORE_add_cert_orig = (X509_STORE_add_cert_fptr)addr;
         msg(PLUGIN_PREFIX "returned %p for X509_STORE_add_cert", X509_STORE_add_cert_hook);
