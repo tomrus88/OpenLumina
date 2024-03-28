@@ -100,6 +100,12 @@ void* dlopen_hook(const char* filename, int flags)
     msg(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
     return dlopen(filename, flags);
 }
+void* dlsym_hook(void* handle, const char* symbol)
+{
+    //if ((debug & IDA_DEBUG_LUMINA) != 0)
+    msg(PLUGIN_PREFIX "dlsym_hook: %p %s\n", handle, symbol);
+    return dlsym(handle, symbol);
+}
 #endif
 
 bool idaapi plugin_ctx_t::run(size_t arg)
@@ -167,6 +173,11 @@ bool plugin_ctx_t::init_hook()
     }
 #endif
     if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, NULL) != 0) {
+        printf("plthook_replace error: %s\n", plthook_error());
+        plthook_close(plthook);
+        return false;
+    }
+    if (plthook_replace(plthook, "dlsym", (void*)dlsym_hook, NULL) != 0) {
         printf("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
