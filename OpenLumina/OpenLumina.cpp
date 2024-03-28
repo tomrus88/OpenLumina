@@ -7,6 +7,41 @@
 //#undef __NT__
 //#define __LINUX__ 1
 
+bool load_certificate(qstring& buffer, const char* certFilePath)
+{
+    auto certFile = fopenRT(certFilePath);
+
+    if (certFile != nullptr)
+    {
+        qstring line;
+        bool hasHeader = false, hasFooter = false;
+
+        if (qgetline(&line, certFile) >= 0)
+        {
+            do
+            {
+                if (strcmp(line.c_str(), "-----BEGIN CERTIFICATE-----") == 0)
+                    hasHeader = true;
+
+                if (strcmp(line.c_str(), "-----END CERTIFICATE-----") == 0)
+                    hasFooter = true;
+
+                if (line.length())
+                    buffer += line;
+
+            } while (qgetline(&line, certFile) >= 0);
+        }
+
+        qfclose(certFile);
+
+        if ((debug & IDA_DEBUG_LUMINA) != 0)
+            msg(PLUGIN_PREFIX "load_certificate: %s\n", buffer.c_str());
+
+        return hasHeader && hasFooter;
+    }
+    return false;
+}
+
 bool load_and_decode_certificate(bytevec_t& buffer, const char* certFilePath)
 {
     auto certFile = fopenRT(certFilePath);
@@ -34,7 +69,7 @@ bool load_and_decode_certificate(bytevec_t& buffer, const char* certFilePath)
         qfclose(certFile);
 
         if ((debug & IDA_DEBUG_LUMINA) != 0)
-            msg(PLUGIN_PREFIX "cert read: %s\n", cert.c_str());
+            msg(PLUGIN_PREFIX "load_and_decode_certificate: %s\n", cert.c_str());
 
         return base64_decode(&buffer, cert.c_str(), cert.length());
     }
@@ -88,19 +123,44 @@ static BOOL WINAPI CertAddEncodedCertificateToStore_hook2(HCERTSTORE hCertStore,
         }
     }
 
-    // continue adding official root certificate to certificate store 
+    // continue adding official root certificate to certificate store
     return CertAddEncodedCertificateToStore(hCertStore, dwCertEncodingType, pbCertEncoded, cbCertEncoded, dwAddDisposition, ppCertContext);
 }
 #endif
 
 #if __LINUX__
-typedef int (*X509_STORE_add_cert_fptr)(void* ctx, void* x);
+typedef int (*X509_STORE_add_cert_fptr)(X509_STORE* ctx, X509* x);
 
 static X509_STORE_add_cert_fptr X509_STORE_add_cert_orig = nullptr;
 
-int X509_STORE_add_cert_hook(void* ctx, void* x)
+int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
 {
+    //if ((debug & IDA_DEBUG_LUMINA) != 0)
     msg(PLUGIN_PREFIX "X509_STORE_add_cert_hook: %p %p\n", ctx, x);
+
+    if (s_plugin_ctx->pemCert.length() != 0)
+    {
+        const char* certText = s_plugin_ctx->pemCert.c_str();
+        BIO* mem = BIO_new(BIO_s_mem());;
+        BIO_puts(mem, certText);
+        X509* cert = PEM_read_bio_X509(mem, NULL, 0, NULL);
+        BIO_free(mem);
+
+        // inject our root certificate to certificate store
+        if (!X509_STORE_add_cert_orig(ctx, cert))
+        {
+            msg(PLUGIN_PREFIX "failed to add our root certificate to certificate store!\n");
+        }
+        else
+        {
+            if ((debug & IDA_DEBUG_LUMINA) != 0)
+                msg(PLUGIN_PREFIX "added our root certificate to certificate store\n");
+        }
+
+        X509_free(cert);
+    }
+
+    // continue adding official root certificate to certificate store
     return X509_STORE_add_cert_orig(ctx, x);
 }
 
@@ -129,6 +189,10 @@ void* dlsym_hook(void* handle, const char* symbol)
 }
 #endif
 
+#if __MAC__
+//TODO
+#endif
+
 bool idaapi plugin_ctx_t::run(size_t arg)
 {
     msg(PLUGIN_PREFIX "plugin run called\n");
@@ -150,12 +214,19 @@ bool plugin_ctx_t::init_hook()
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "using certificate file \"%s\"\n", certFileName);
 
+#if __NT__
     if (!load_and_decode_certificate(decodedCert, certFileName))
     {
-        msg(PLUGIN_PREFIX "failed to decode certificate file!\n");
+        msg(PLUGIN_PREFIX "failed to load and decode certificate file!\n");
         return false;
     }
-
+#elif __LINUX__
+    if (!load_certificate(pemCert, certFileName))
+    {
+        msg(PLUGIN_PREFIX "failed to load certificate file!\n");
+        return false;
+    }
+#endif
     //DetourTransactionBegin();
     //DetourUpdateThread(GetCurrentThread());
     //DetourAttach(&(PVOID&)CertAddEncodedCertificateToStore_orig, CertAddEncodedCertificateToStore_hook);

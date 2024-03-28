@@ -14,6 +14,8 @@
 
 #if __LINUX__
 #include <dlfcn.h>
+#include "openssl/x509.h"
+#include <openssl/pem.h>
 #endif
 
 #include <ida.hpp>
