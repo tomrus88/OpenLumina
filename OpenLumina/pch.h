@@ -18,7 +18,8 @@
 #include <kernwin.hpp>
 #include <diskio.hpp>
 
-#include "detours/detours.h"
+//#include "detours/detours.h"
+#include "plthook/plthook.h"
 
 #include "plugin_ctx.h"
 

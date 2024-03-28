@@ -4,7 +4,7 @@
 #define PLUGIN_DESC		"Allows IDA to connect to third party Lumina servers"
 #define PLUGIN_PREFIX	"OpenLumina: "
 
-bool load_and_decode_certificate(bytevec_t* buffer, const char* certFilePath)
+bool load_and_decode_certificate(bytevec_t& buffer, const char* certFilePath)
 {
     auto certFile = fopenRT(certFilePath);
 
@@ -33,7 +33,7 @@ bool load_and_decode_certificate(bytevec_t* buffer, const char* certFilePath)
         if ((debug & IDA_DEBUG_LUMINA) != 0)
             msg(PLUGIN_PREFIX "cert read: %s\n", cert.c_str());
 
-        return base64_decode(buffer, cert.c_str(), cert.length());
+        return base64_decode(&buffer, cert.c_str(), cert.length());
     }
     return false;
 }
@@ -65,6 +65,29 @@ static BOOL WINAPI HookedCertAddEncodedCertificateToStore(HCERTSTORE hCertStore,
     return TrueCertAddEncodedCertificateToStore(hCertStore, dwCertEncodingType, pbCertEncoded, cbCertEncoded, dwAddDisposition, ppCertContext);
 }
 
+static BOOL WINAPI HookedCertAddEncodedCertificateToStore2(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext)
+{
+    if ((debug & IDA_DEBUG_LUMINA) != 0)
+        msg(PLUGIN_PREFIX "HookedCertAddEncodedCertificateToStore2 called\n");
+
+    if (s_plugin_ctx != nullptr && s_plugin_ctx->decodedCert.size() != 0)
+    {
+        // inject our root certificate to certificate store
+        if (!CertAddEncodedCertificateToStore(hCertStore, X509_ASN_ENCODING, &s_plugin_ctx->decodedCert[0], s_plugin_ctx->decodedCert.size(), CERT_STORE_ADD_USE_EXISTING, nullptr))
+        {
+            msg(PLUGIN_PREFIX "failed to add our root certificate to certificate store!\n");
+        }
+        else
+        {
+            if ((debug & IDA_DEBUG_LUMINA) != 0)
+                msg(PLUGIN_PREFIX "added our root certificate to certificate store\n");
+        }
+    }
+
+    // continue adding official root certificate to certificate store 
+    return CertAddEncodedCertificateToStore(hCertStore, dwCertEncodingType, pbCertEncoded, cbCertEncoded, dwAddDisposition, ppCertContext);
+}
+
 bool idaapi plugin_ctx_t::run(size_t arg)
 {
     msg(PLUGIN_PREFIX "plugin run called\n");
@@ -86,16 +109,36 @@ bool plugin_ctx_t::init_hook()
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "using certificate file \"%s\"\n", certFileName);
 
-    if (!load_and_decode_certificate(&decodedCert, certFileName))
+    if (!load_and_decode_certificate(decodedCert, certFileName))
     {
         msg(PLUGIN_PREFIX "failed to decode certificate file!\n");
         return false;
     }
 
-    DetourTransactionBegin();
-    DetourUpdateThread(GetCurrentThread());
-    DetourAttach(&(PVOID&)TrueCertAddEncodedCertificateToStore, HookedCertAddEncodedCertificateToStore);
-    DetourTransactionCommit();
+    //DetourTransactionBegin();
+    //DetourUpdateThread(GetCurrentThread());
+    //DetourAttach(&(PVOID&)TrueCertAddEncodedCertificateToStore, HookedCertAddEncodedCertificateToStore);
+    //DetourTransactionCommit();
+    plthook_t* plthook;
+
+#if __EA64__
+    if (plthook_open(&plthook, "ida64.dll") != 0) {
+        printf("plthook_open error: %s\n", plthook_error());
+        return false;
+    }
+#else
+    if (plthook_open(&plthook, "ida.dll") != 0) {
+        printf("plthook_open error: %s\n", plthook_error());
+        return false;
+    }
+#endif
+
+    if (plthook_replace(plthook, "CertAddEncodedCertificateToStore", (void*)HookedCertAddEncodedCertificateToStore2, NULL) != 0) {
+        printf("plthook_replace error: %s\n", plthook_error());
+        plthook_close(plthook);
+        return false;
+    }
+    plthook_close(plthook);
 
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "certificate hook applied\n");
@@ -105,10 +148,12 @@ bool plugin_ctx_t::init_hook()
 
 plugin_ctx_t::~plugin_ctx_t()
 {
-    DetourTransactionBegin();
-    DetourUpdateThread(GetCurrentThread());
-    DetourDetach(&(PVOID&)TrueCertAddEncodedCertificateToStore, HookedCertAddEncodedCertificateToStore);
-    DetourTransactionCommit();
+    //DetourTransactionBegin();
+    //DetourUpdateThread(GetCurrentThread());
+    //DetourDetach(&(PVOID&)TrueCertAddEncodedCertificateToStore, HookedCertAddEncodedCertificateToStore);
+    //DetourTransactionCommit();
+
+    s_plugin_ctx = nullptr;
 }
 
 static plugmod_t* idaapi init()
