@@ -12,6 +12,10 @@
 
 #include <cstdio>
 
+#if __LINUX__
+#include <dlfcn.h>
+#endif
+
 #include <ida.hpp>
 #include <idp.hpp>
 #include <loader.hpp>
