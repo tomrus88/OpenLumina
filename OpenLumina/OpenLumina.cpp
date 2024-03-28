@@ -155,7 +155,7 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
         }
         else
         {
-            if ((debug & IDA_DEBUG_LUMINA) != 0)
+            //if ((debug & IDA_DEBUG_LUMINA) != 0)
                 msg(PLUGIN_PREFIX "added our root certificate to certificate store\n");
         }
 
