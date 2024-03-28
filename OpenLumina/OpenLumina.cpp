@@ -94,6 +94,16 @@ static BOOL WINAPI CertAddEncodedCertificateToStore_hook2(HCERTSTORE hCertStore,
 #endif
 
 #if __LINUX__
+typedef int (*X509_STORE_add_cert_fptr)(void* ctx, void* x);
+
+static X509_STORE_add_cert_fptr X509_STORE_add_cert_orig = nullptr;
+
+int X509_STORE_add_cert_hook(void* ctx, void* x)
+{
+    msg(PLUGIN_PREFIX "X509_STORE_add_cert_hook: %p %p\n", ctx, x);
+    return X509_STORE_add_cert_orig(ctx, x);
+}
+
 void* dlopen_hook(const char* filename, int flags)
 {
     //if ((debug & IDA_DEBUG_LUMINA) != 0)
@@ -104,7 +114,19 @@ void* dlsym_hook(void* handle, const char* symbol)
 {
     //if ((debug & IDA_DEBUG_LUMINA) != 0)
     msg(PLUGIN_PREFIX "dlsym_hook: %p %s\n", handle, symbol);
-    return dlsym(handle, symbol);
+
+    //X509_STORE_add_cert
+
+    void *addr = dlsym(handle, symbol);
+
+    if (addr != nullptr && strcmp(symbol, "X509_STORE_add_cert"))
+    {
+        X509_STORE_add_cert_orig = (X509_STORE_add_cert_fptr)addr;
+        msg(PLUGIN_PREFIX "returned %p for X509_STORE_add_cert", X509_STORE_add_cert_hook);
+        return X509_STORE_add_cert_hook;
+    }
+
+    return addr;
 }
 #endif
 
