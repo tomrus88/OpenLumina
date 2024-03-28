@@ -93,7 +93,7 @@ static BOOL WINAPI CertAddEncodedCertificateToStore_hook2(HCERTSTORE hCertStore,
 }
 #endif
 
-#if __LINUX__
+#if __LINUX__ || __MAC__
 bool load_certificate(qstring& buffer, const char* certFilePath)
 {
     auto certFile = fopenRT(certFilePath);
@@ -192,10 +192,6 @@ void* dlsym_hook(void* handle, const char* symbol)
 }
 #endif
 
-#if __MAC__
-//TODO
-#endif
-
 bool idaapi plugin_ctx_t::run(size_t arg)
 {
     msg(PLUGIN_PREFIX "plugin run called\n");
@@ -223,7 +219,7 @@ bool plugin_ctx_t::init_hook()
         msg(PLUGIN_PREFIX "failed to load and decode certificate file!\n");
         return false;
     }
-#elif __LINUX__
+#elif __LINUX__ || __MAC__
     if (!load_certificate(pemCert, certFileName))
     {
         msg(PLUGIN_PREFIX "failed to load certificate file!\n");
@@ -263,6 +259,30 @@ bool plugin_ctx_t::init_hook()
     }
 #else
     if (plthook_open(&plthook, "libida.so") != 0) {
+        printf("plthook_open error: %s\n", plthook_error());
+        return false;
+    }
+#endif
+    if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, NULL) != 0) {
+        printf("plthook_replace error: %s\n", plthook_error());
+        plthook_close(plthook);
+        return false;
+    }
+    if (plthook_replace(plthook, "dlsym", (void*)dlsym_hook, NULL) != 0) {
+        printf("plthook_replace error: %s\n", plthook_error());
+        plthook_close(plthook);
+        return false;
+    }
+#endif
+
+#if __MAC__
+#if __EA64__
+    if (plthook_open(&plthook, "libida64.dylib") != 0) {
+        printf("plthook_open error: %s\n", plthook_error());
+        return false;
+    }
+#else
+    if (plthook_open(&plthook, "libida.dylib") != 0) {
         printf("plthook_open error: %s\n", plthook_error());
         return false;
     }
