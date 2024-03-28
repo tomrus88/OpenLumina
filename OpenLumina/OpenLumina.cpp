@@ -40,6 +40,7 @@ bool load_and_decode_certificate(bytevec_t& buffer, const char* certFilePath)
 
 static plugin_ctx_t* s_plugin_ctx = nullptr;
 
+#if WIN32
 static BOOL(WINAPI* TrueCertAddEncodedCertificateToStore)(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext) = CertAddEncodedCertificateToStore;
 
 static BOOL WINAPI HookedCertAddEncodedCertificateToStore(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext)
@@ -87,6 +88,7 @@ static BOOL WINAPI HookedCertAddEncodedCertificateToStore2(HCERTSTORE hCertStore
     // continue adding official root certificate to certificate store 
     return CertAddEncodedCertificateToStore(hCertStore, dwCertEncodingType, pbCertEncoded, cbCertEncoded, dwAddDisposition, ppCertContext);
 }
+#endif
 
 bool idaapi plugin_ctx_t::run(size_t arg)
 {
@@ -96,7 +98,7 @@ bool idaapi plugin_ctx_t::run(size_t arg)
 
 bool plugin_ctx_t::init_hook()
 {
-    char fileNameBuffer[MAX_PATH];
+    char fileNameBuffer[QMAXPATH];
 
     auto certFileName = getsysfile(fileNameBuffer, sizeof(fileNameBuffer), "hexrays.crt", nullptr);
 
@@ -121,6 +123,7 @@ bool plugin_ctx_t::init_hook()
     //DetourTransactionCommit();
     plthook_t* plthook;
 
+#if WIN32
 #if __EA64__
     if (plthook_open(&plthook, "ida64.dll") != 0) {
         printf("plthook_open error: %s\n", plthook_error());
@@ -138,6 +141,7 @@ bool plugin_ctx_t::init_hook()
         plthook_close(plthook);
         return false;
     }
+#endif
     plthook_close(plthook);
 
     if ((debug & IDA_DEBUG_LUMINA) != 0)
