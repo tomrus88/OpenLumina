@@ -4,8 +4,8 @@
 #define PLUGIN_DESC		"Allows IDA to connect to third party Lumina servers"
 #define PLUGIN_PREFIX	"OpenLumina: "
 
-//#undef __NT__
-//#define __LINUX__ 1
+#undef __NT__
+#define __LINUX__ 1
 
 bool load_certificate(qstring& buffer, const char* certFilePath)
 {
@@ -27,14 +27,16 @@ bool load_certificate(qstring& buffer, const char* certFilePath)
                     hasFooter = true;
 
                 if (line.length())
+                {
                     buffer += line;
-
+                    buffer += "\n";
+                }
             } while (qgetline(&line, certFile) >= 0);
         }
 
         qfclose(certFile);
 
-        if ((debug & IDA_DEBUG_LUMINA) != 0)
+        //if ((debug & IDA_DEBUG_LUMINA) != 0)
             msg(PLUGIN_PREFIX "load_certificate: %s\n", buffer.c_str());
 
         return hasHeader && hasFooter;
