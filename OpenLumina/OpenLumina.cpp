@@ -4,6 +4,9 @@
 #define PLUGIN_DESC		"Allows IDA to connect to third party Lumina servers"
 #define PLUGIN_PREFIX	"OpenLumina: "
 
+//#undef __NT__
+//#define __LINUX__ 1
+
 bool load_and_decode_certificate(bytevec_t& buffer, const char* certFilePath)
 {
     auto certFile = fopenRT(certFilePath);
@@ -40,18 +43,18 @@ bool load_and_decode_certificate(bytevec_t& buffer, const char* certFilePath)
 
 static plugin_ctx_t* s_plugin_ctx = nullptr;
 
-#if WIN32
-static BOOL(WINAPI* TrueCertAddEncodedCertificateToStore)(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext) = CertAddEncodedCertificateToStore;
+#if __NT__
+static BOOL(WINAPI* CertAddEncodedCertificateToStore_orig)(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext) = CertAddEncodedCertificateToStore;
 
-static BOOL WINAPI HookedCertAddEncodedCertificateToStore(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext)
+static BOOL WINAPI CertAddEncodedCertificateToStore_hook(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext)
 {
     if ((debug & IDA_DEBUG_LUMINA) != 0)
-        msg(PLUGIN_PREFIX "HookedCertAddEncodedCertificateToStore called\n");
+        msg(PLUGIN_PREFIX "CertAddEncodedCertificateToStore_hook called\n");
 
     if (s_plugin_ctx != nullptr && s_plugin_ctx->decodedCert.size() != 0)
     {
         // inject our root certificate to certificate store
-        if (!TrueCertAddEncodedCertificateToStore(hCertStore, X509_ASN_ENCODING, &s_plugin_ctx->decodedCert[0], s_plugin_ctx->decodedCert.size(), CERT_STORE_ADD_USE_EXISTING, nullptr))
+        if (!CertAddEncodedCertificateToStore_orig(hCertStore, X509_ASN_ENCODING, &s_plugin_ctx->decodedCert[0], s_plugin_ctx->decodedCert.size(), CERT_STORE_ADD_USE_EXISTING, nullptr))
         {
             msg(PLUGIN_PREFIX "failed to add our root certificate to certificate store!\n");
         }
@@ -63,13 +66,13 @@ static BOOL WINAPI HookedCertAddEncodedCertificateToStore(HCERTSTORE hCertStore,
     }
 
     // continue adding official root certificate to certificate store 
-    return TrueCertAddEncodedCertificateToStore(hCertStore, dwCertEncodingType, pbCertEncoded, cbCertEncoded, dwAddDisposition, ppCertContext);
+    return CertAddEncodedCertificateToStore_orig(hCertStore, dwCertEncodingType, pbCertEncoded, cbCertEncoded, dwAddDisposition, ppCertContext);
 }
 
-static BOOL WINAPI HookedCertAddEncodedCertificateToStore2(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext)
+static BOOL WINAPI CertAddEncodedCertificateToStore_hook2(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext)
 {
     if ((debug & IDA_DEBUG_LUMINA) != 0)
-        msg(PLUGIN_PREFIX "HookedCertAddEncodedCertificateToStore2 called\n");
+        msg(PLUGIN_PREFIX "CertAddEncodedCertificateToStore_hook2 called\n");
 
     if (s_plugin_ctx != nullptr && s_plugin_ctx->decodedCert.size() != 0)
     {
@@ -87,6 +90,15 @@ static BOOL WINAPI HookedCertAddEncodedCertificateToStore2(HCERTSTORE hCertStore
 
     // continue adding official root certificate to certificate store 
     return CertAddEncodedCertificateToStore(hCertStore, dwCertEncodingType, pbCertEncoded, cbCertEncoded, dwAddDisposition, ppCertContext);
+}
+#endif
+
+#if __LINUX__
+void* dlopen_hook(const char* filename, int flags)
+{
+    //if ((debug & IDA_DEBUG_LUMINA) != 0)
+    msg(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
+    return dlopen(filename, flags);
 }
 #endif
 
@@ -119,11 +131,11 @@ bool plugin_ctx_t::init_hook()
 
     //DetourTransactionBegin();
     //DetourUpdateThread(GetCurrentThread());
-    //DetourAttach(&(PVOID&)TrueCertAddEncodedCertificateToStore, HookedCertAddEncodedCertificateToStore);
+    //DetourAttach(&(PVOID&)CertAddEncodedCertificateToStore_orig, CertAddEncodedCertificateToStore_hook);
     //DetourTransactionCommit();
     plthook_t* plthook;
 
-#if WIN32
+#if __NT__
 #if __EA64__
     if (plthook_open(&plthook, "ida64.dll") != 0) {
         printf("plthook_open error: %s\n", plthook_error());
@@ -135,8 +147,26 @@ bool plugin_ctx_t::init_hook()
         return false;
     }
 #endif
+    if (plthook_replace(plthook, "CertAddEncodedCertificateToStore", (void*)CertAddEncodedCertificateToStore_hook2, NULL) != 0) {
+        printf("plthook_replace error: %s\n", plthook_error());
+        plthook_close(plthook);
+        return false;
+    }
+#endif
 
-    if (plthook_replace(plthook, "CertAddEncodedCertificateToStore", (void*)HookedCertAddEncodedCertificateToStore2, NULL) != 0) {
+#if __LINUX__
+#if __EA64__
+    if (plthook_open(&plthook, "libida64.so") != 0) {
+        printf("plthook_open error: %s\n", plthook_error());
+        return false;
+    }
+#else
+    if (plthook_open(&plthook, "libida.so") != 0) {
+        printf("plthook_open error: %s\n", plthook_error());
+        return false;
+    }
+#endif
+    if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, NULL) != 0) {
         printf("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
@@ -154,7 +184,7 @@ plugin_ctx_t::~plugin_ctx_t()
 {
     //DetourTransactionBegin();
     //DetourUpdateThread(GetCurrentThread());
-    //DetourDetach(&(PVOID&)TrueCertAddEncodedCertificateToStore, HookedCertAddEncodedCertificateToStore);
+    //DetourDetach(&(PVOID&)CertAddEncodedCertificateToStore_orig, CertAddEncodedCertificateToStore_hook);
     //DetourTransactionCommit();
 
     s_plugin_ctx = nullptr;
