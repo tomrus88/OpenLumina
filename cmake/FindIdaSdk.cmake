@@ -139,12 +139,11 @@ function(_ida_plugin name ea64 link_script) # ARGN contains sources
   if(UNIX)
     target_compile_options(${t} PUBLIC ${_ida_compile_options})
     if(APPLE)
-      target_link_libraries(${t} ${_ida_compile_options} -Wl,-flat_namespace
-                            -Wl,-undefined,warning -Wl,-exported_symbol,_PLUGIN)
+      #target_link_libraries(${t} ${_ida_compile_options} -Wl,-flat_namespace -Wl,-undefined,warning -Wl,-exported_symbol,_PLUGIN)
+      target_link_libraries(${t} ${_ida_compile_options} -Wl,--version-script ${IdaSdk_DIR}/${link_script})
     else()
       # Always use the linker script needed for IDA.
-      target_link_libraries(${t} ${_ida_compile_options} -Wl,--version-script
-                            ${IdaSdk_DIR}/${link_script})
+      target_link_libraries(${t} ${_ida_compile_options} -Wl,--version-script ${IdaSdk_DIR}/${link_script})
     endif()
 
     # For qrefcnt_obj_t in ida.hpp
