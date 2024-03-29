@@ -23,6 +23,12 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
 if(UNIX OR APPLE)
     find_package(OpenSSL REQUIRED)
+    if (OPENSSL_FOUND)
+        include_directories(${OPENSSL_INCLUDE_DIR})
+        message(STATUS "Found OpenSSL ${OPENSSL_VERSION} ${OPENSSL_INCLUDE_DIR}")
+    else()
+        message(STATUS "OpenSSL Not Found")
+    endif()
 endif()
 find_package(IdaSdk REQUIRED)
 
@@ -55,15 +61,6 @@ set(src
 add_ida_plugin(OpenLumina ${PROJECT_SOURCE_DIR}/OpenLumina/OpenLumina.cpp)
 
 set_ida_target_properties(OpenLumina PROPERTIES CXX_STANDARD 20)
-if(UNIX OR APPLE)
-    if (OPENSSL_FOUND)
-        #ida_target_include_directories(OpenLumina PUBLIC ${OPENSSL_INCLUDE_DIR})
-        include_directories(${OPENSSL_INCLUDE_DIR})
-        message(STATUS "Found OpenSSL ${OPENSSL_VERSION} 1 ${OPENSSL_INCLUDE_DIR} 2 ${OPENSSL_INCLUDE_DIRS}")
-    else()
-        message(STATUS "OpenSSL Not Found")
-    endif()
-endif()
 ida_target_include_directories(OpenLumina PRIVATE ${IdaSdk_INCLUDE_DIRS})
 
 add_ida_library(OpenLuminaLib ${src})
