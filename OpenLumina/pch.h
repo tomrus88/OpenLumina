@@ -12,7 +12,7 @@
 
 #include <cstdio>
 
-#if __LINUX__
+#if __LINUX__ || __MAC__
 #include <dlfcn.h>
 #include "openssl/x509.h"
 #include <openssl/pem.h>
