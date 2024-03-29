@@ -23,6 +23,12 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
 if(UNIX OR APPLE)
     find_package(OpenSSL REQUIRED)
+    if (OPENSSL_FOUND)
+        ida_target_include_directories(OpenLumina PUBLIC ${OPENSSL_INCLUDE_DIR})
+        message(STATUS "Found OpenSSL ${OPENSSL_VERSION}")
+    else()
+        message(STATUS "OpenSSL Not Found")
+    endif()
 endif()
 find_package(IdaSdk REQUIRED)
 
