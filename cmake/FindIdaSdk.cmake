@@ -168,7 +168,7 @@ function(_ida_loader name ea64 link_script)
   if(UNIX)
     target_compile_options(${t} PUBLIC ${_ida_compile_options})
     if(APPLE)
-      target_link_libraries(${t} ${_ida_compile_options} -Wl,-flat_namespace -Wl,-undefined,warning -Wl,-exported_symbol,_LDSC)
+      target_link_libraries(${t} ${_ida_compile_options} -Wl,-flat_namespace -Wl,-undefined,dynamic_lookup -Wl,-exported_symbol,_LDSC)
     else()
       # Always use the linker script needed for IDA.
       target_link_libraries(${t} ${_ida_compile_options} -Wl,--version-script ${IdaSdk_DIR}/${link_script})
