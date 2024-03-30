@@ -73,7 +73,7 @@ add_ida_plugin(OpenLumina ${PROJECT_SOURCE_DIR}/OpenLumina/OpenLumina.cpp)
 
 set_ida_target_properties(OpenLumina PROPERTIES CXX_STANDARD 20)
 if (APPLE)
-    set_ida_target_properties(OpenLumina PROPERTIES LINK_FLAGS_RELEASE -S)
+    set_ida_target_properties(OpenLumina PROPERTIES LINK_FLAGS_RELEASE -x)
 else()
     set_ida_target_properties(OpenLumina PROPERTIES LINK_FLAGS_RELEASE -s)
 endif()
