@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.7)
 
+if (APPLE)
+    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)
+endif()
+
 project(OpenLumina C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
