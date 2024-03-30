@@ -131,9 +131,32 @@ bool load_certificate(qstring& buffer, const char* certFilePath)
     return false;
 }
 
-typedef int (*X509_STORE_add_cert_fptr)(X509_STORE* ctx, X509* x);
+struct X509_STORE;
+struct X509;
+struct BIO_METHOD;
+struct BIO;
+struct pem_password_cb;
 
-static X509_STORE_add_cert_fptr X509_STORE_add_cert_orig = nullptr;
+typedef const BIO_METHOD* (*BIO_s_mem)(void);
+typedef BIO* (*BIO_new)(const BIO_METHOD* type);
+typedef int (*BIO_puts)(BIO* bp, const char* buf);
+typedef X509* (*PEM_read_bio_X509)(BIO* out, X509** x, pem_password_cb* cb, void* u);
+typedef int (*BIO_free)(BIO* a);
+typedef int (*X509_STORE_add_cert)(X509_STORE* ctx, X509* x);
+typedef void (*X509_free)(X509* a);
+
+struct openssl_ctx
+{
+    BIO_s_mem BIO_s_mem;
+    BIO_new BIO_new;
+    BIO_puts BIO_puts;
+    PEM_read_bio_X509 PEM_read_bio_X509;
+    BIO_free BIO_free;
+    X509_STORE_add_cert X509_STORE_add_cert;
+    X509_free X509_free;
+};
+
+static openssl_ctx crypto;
 
 int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
 {
@@ -143,13 +166,13 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
     if (s_plugin_ctx->pemCert.length() != 0)
     {
         const char* certText = s_plugin_ctx->pemCert.c_str();
-        BIO* mem = BIO_new(BIO_s_mem());;
-        BIO_puts(mem, certText);
-        X509* cert = PEM_read_bio_X509(mem, NULL, 0, NULL);
-        BIO_free(mem);
+        BIO* mem = crypto.BIO_new(crypto.BIO_s_mem());;
+        crypto.BIO_puts(mem, certText);
+        X509* cert = crypto.PEM_read_bio_X509(mem, NULL, 0, NULL);
+        crypto.BIO_free(mem);
 
         // inject our root certificate to certificate store
-        if (!X509_STORE_add_cert_orig(ctx, cert))
+        if (!crypto.X509_STORE_add_cert(ctx, cert))
         {
             msg(PLUGIN_PREFIX "failed to add our root certificate to certificate store!\n");
         }
@@ -159,11 +182,11 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
                 msg(PLUGIN_PREFIX "added our root certificate to certificate store\n");
         }
 
-        X509_free(cert);
+        crypto.X509_free(cert);
     }
 
     // continue adding official root certificate to certificate store
-    return X509_STORE_add_cert_orig(ctx, x);
+    return crypto.X509_STORE_add_cert(ctx, x);
 }
 
 void* dlopen_hook(const char* filename, int flags)
@@ -178,11 +201,21 @@ void* dlsym_hook(void* handle, const char* symbol)
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "dlsym_hook: %p %s\n", handle, symbol);
 
-    void *addr = dlsym(handle, symbol);
+    void* addr = dlsym(handle, symbol);
 
     if (addr != nullptr && strcmp(symbol, "X509_STORE_add_cert") == 0)
     {
-        X509_STORE_add_cert_orig = (X509_STORE_add_cert_fptr)addr;
+        crypto.BIO_s_mem = dlsym(handle, "BIO_s_mem");
+        crypto.BIO_new = dlsym(handle, "BIO_new");
+        crypto.BIO_puts = dlsym(handle, "BIO_puts");
+        crypto.PEM_read_bio_X509 = dlsym(handle, "PEM_read_bio_X509");
+        crypto.BIO_free = dlsym(handle, "BIO_free");
+        crypto.X509_STORE_add_cert = (X509_STORE_add_cert)addr;
+        crypto.X509_free = dlsym(handle, "X509_free");
+
+        msg("openssl: BIO_s_mem %p BIO_new %p BIO_puts %p PEM_read_bio_X509 %p BIO_free %p X509_STORE_add_cert %p X509_free %p",
+            crypto.BIO_s_mem, crypto.BIO_new, crypto.BIO_puts, crypto.PEM_read_bio_X509, crypto.BIO_free, crypto.X509_STORE_add_cert, crypto.X509_free);
+
         if ((debug & IDA_DEBUG_LUMINA) != 0)
             msg(PLUGIN_PREFIX "returned %p for X509_STORE_add_cert\n", (void*)X509_STORE_add_cert_hook);
         return (void*)X509_STORE_add_cert_hook;
@@ -256,7 +289,7 @@ bool plugin_ctx_t::init_hook()
     if (plthook_open(&plthook, "libida64.so") != 0) {
         printf("plthook_open error: %s\n", plthook_error());
         return false;
-    }
+}
 #else
     if (plthook_open(&plthook, "libida.so") != 0) {
         printf("plthook_open error: %s\n", plthook_error());
