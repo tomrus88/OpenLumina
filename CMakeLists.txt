@@ -72,7 +72,11 @@ set(src
 add_ida_plugin(OpenLumina ${PROJECT_SOURCE_DIR}/OpenLumina/OpenLumina.cpp)
 
 set_ida_target_properties(OpenLumina PROPERTIES CXX_STANDARD 20)
-set_ida_target_properties(OpenLumina PROPERTIES LINK_FLAGS_RELEASE -s)
+if (APPLE)
+    set_ida_target_properties(OpenLumina PROPERTIES LINK_FLAGS_RELEASE -S)
+else()
+    set_ida_target_properties(OpenLumina PROPERTIES LINK_FLAGS_RELEASE -s)
+endif()
 ida_target_include_directories(OpenLumina PRIVATE ${IdaSdk_INCLUDE_DIRS})
 
 add_ida_library(OpenLuminaLib ${src})
