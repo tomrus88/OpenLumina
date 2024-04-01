@@ -100,31 +100,40 @@ bool load_certificate(qstring& buffer, const char* certFilePath)
 
     if (certFile != nullptr)
     {
-        qstring line;
-        bool hasHeader = false, hasFooter = false;
+        uint64 certSize = qfsize(certFile);
 
-        if (qgetline(&line, certFile) >= 0)
-        {
-            do
-            {
-                if (strcmp(line.c_str(), "-----BEGIN CERTIFICATE-----") == 0)
-                    hasHeader = true;
+        buffer.resize(certSize, '\0');
 
-                if (strcmp(line.c_str(), "-----END CERTIFICATE-----") == 0)
-                    hasFooter = true;
+        qfread(certFile, &buffer[0], certSize);
 
-                if (line.length())
-                {
-                    buffer += line;
-                    buffer += "\n";
-                }
-            } while (qgetline(&line, certFile) >= 0);
-        }
+        //qstring line;
+        //bool hasHeader = false, hasFooter = false;
+
+        //if (qgetline(&line, certFile) >= 0)
+        //{
+        //    do
+        //    {
+        //        if (strcmp(line.c_str(), "-----BEGIN CERTIFICATE-----") == 0)
+        //            hasHeader = true;
+
+        //        if (strcmp(line.c_str(), "-----END CERTIFICATE-----") == 0)
+        //            hasFooter = true;
+
+        //        if (line.length())
+        //        {
+        //            buffer += line;
+        //            buffer += "\n";
+        //        }
+        //    } while (qgetline(&line, certFile) >= 0);
+        //}
 
         qfclose(certFile);
 
         if ((debug & IDA_DEBUG_LUMINA) != 0)
-            msg(PLUGIN_PREFIX "load_certificate: %s\n", buffer.c_str());
+            msg(PLUGIN_PREFIX "load_certificate: %s %u %u\n", buffer.c_str(), buffer.length(), buffer.size());
+
+        bool hasHeader = strcmp(buffer.c_str(), "-----BEGIN CERTIFICATE-----") == 0;
+        bool hasFooter = strcmp(buffer.c_str(), "-----END CERTIFICATE-----") == 0;
 
         return hasHeader && hasFooter;
     }
@@ -163,7 +172,7 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "X509_STORE_add_cert_hook: %p %p\n", ctx, x);
 
-    if (s_plugin_ctx->pemCert.length() != 0)
+    if (s_plugin_ctx != nullptr && s_plugin_ctx->pemCert.length() != 0)
     {
         const char* certText = s_plugin_ctx->pemCert.c_str();
         BIO* mem = crypto.BIO_new(crypto.BIO_s_mem());;
@@ -213,11 +222,13 @@ void* dlsym_hook(void* handle, const char* symbol)
         crypto.X509_STORE_add_cert = (X509_STORE_add_cert_fptr)addr;
         crypto.X509_free = (X509_free_fptr)dlsym(handle, "X509_free");
 
-        msg("openssl: BIO_s_mem %p BIO_new %p BIO_puts %p PEM_read_bio_X509 %p BIO_free %p X509_STORE_add_cert %p X509_free %p",
-            crypto.BIO_s_mem, crypto.BIO_new, crypto.BIO_puts, crypto.PEM_read_bio_X509, crypto.BIO_free, crypto.X509_STORE_add_cert, crypto.X509_free);
+        if ((debug & IDA_DEBUG_LUMINA) != 0)
+            msg("openssl: BIO_s_mem %p BIO_new %p BIO_puts %p PEM_read_bio_X509 %p BIO_free %p X509_STORE_add_cert %p X509_free %p",
+                crypto.BIO_s_mem, crypto.BIO_new, crypto.BIO_puts, crypto.PEM_read_bio_X509, crypto.BIO_free, crypto.X509_STORE_add_cert, crypto.X509_free);
 
         if ((debug & IDA_DEBUG_LUMINA) != 0)
             msg(PLUGIN_PREFIX "returned %p for X509_STORE_add_cert\n", (void*)X509_STORE_add_cert_hook);
+
         return (void*)X509_STORE_add_cert_hook;
     }
 
@@ -268,17 +279,17 @@ bool plugin_ctx_t::init_hook()
 #if __NT__
 #if __EA64__
     if (plthook_open(&plthook, "ida64.dll") != 0) {
-        printf("plthook_open error: %s\n", plthook_error());
+        msg("plthook_open error: %s\n", plthook_error());
         return false;
     }
 #else
     if (plthook_open(&plthook, "ida.dll") != 0) {
-        printf("plthook_open error: %s\n", plthook_error());
+        msg("plthook_open error: %s\n", plthook_error());
         return false;
     }
 #endif
     if (plthook_replace(plthook, "CertAddEncodedCertificateToStore", (void*)CertAddEncodedCertificateToStore_hook2, NULL) != 0) {
-        printf("plthook_replace error: %s\n", plthook_error());
+        msg("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
     }
@@ -287,22 +298,22 @@ bool plugin_ctx_t::init_hook()
 #if __LINUX__
 #if __EA64__
     if (plthook_open(&plthook, "libida64.so") != 0) {
-        printf("plthook_open error: %s\n", plthook_error());
+        msg("plthook_open error: %s\n", plthook_error());
         return false;
 }
 #else
     if (plthook_open(&plthook, "libida.so") != 0) {
-        printf("plthook_open error: %s\n", plthook_error());
+        msg("plthook_open error: %s\n", plthook_error());
         return false;
     }
 #endif
     if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, NULL) != 0) {
-        printf("plthook_replace error: %s\n", plthook_error());
+        msg("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
     }
     if (plthook_replace(plthook, "dlsym", (void*)dlsym_hook, NULL) != 0) {
-        printf("plthook_replace error: %s\n", plthook_error());
+        msg("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
     }
@@ -311,22 +322,22 @@ bool plugin_ctx_t::init_hook()
 #if __MAC__
 #if __EA64__
     if (plthook_open(&plthook, "libida64.dylib") != 0) {
-        printf("plthook_open error: %s\n", plthook_error());
+        msg("plthook_open error: %s\n", plthook_error());
         return false;
     }
 #else
     if (plthook_open(&plthook, "libida.dylib") != 0) {
-        printf("plthook_open error: %s\n", plthook_error());
+        msg("plthook_open error: %s\n", plthook_error());
         return false;
     }
 #endif
     if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, NULL) != 0) {
-        printf("plthook_replace error: %s\n", plthook_error());
+        msg("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
     }
     if (plthook_replace(plthook, "dlsym", (void*)dlsym_hook, NULL) != 0) {
-        printf("plthook_replace error: %s\n", plthook_error());
+        msg("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
     }
