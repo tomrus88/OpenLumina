@@ -132,8 +132,8 @@ bool load_certificate(qstring& buffer, const char* certFilePath)
         if ((debug & IDA_DEBUG_LUMINA) != 0)
             msg(PLUGIN_PREFIX "load_certificate: %s %lu %lu\n", buffer.c_str(), buffer.length(), buffer.size());
 
-        bool hasHeader = strcmp(buffer.c_str(), "-----BEGIN CERTIFICATE-----") == 0;
-        bool hasFooter = strcmp(buffer.c_str(), "-----END CERTIFICATE-----") == 0;
+        bool hasHeader = strstr(buffer.c_str(), "-----BEGIN CERTIFICATE-----") != nullptr;
+        bool hasFooter = strstr(buffer.c_str(), "-----END CERTIFICATE-----") != nullptr;
 
         return hasHeader && hasFooter;
     }
