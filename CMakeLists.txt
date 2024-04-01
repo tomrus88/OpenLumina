@@ -67,6 +67,7 @@ set(src
     "OpenLumina/pch.h"
     "OpenLumina/plugin_ctx.h"
     "OpenLumina/OpenLumina.cpp"
+    "OpenLumina/OpenLumina.h"
 )
 
 add_ida_plugin(OpenLumina ${PROJECT_SOURCE_DIR}/OpenLumina/OpenLumina.cpp)
