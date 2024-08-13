@@ -3,11 +3,9 @@
 #define PLUGIN_NAME		"OpenLumina"
 #define PLUGIN_DESC		"Allows IDA to connect to third party Lumina servers"
 #define PLUGIN_PREFIX	"OpenLumina: "
+#define PLUGIN_VER		__DATE__ " " __TIME__
 
 static plugin_ctx_t* s_plugin_ctx = nullptr;
-
-//#undef __NT__
-//#define __LINUX__ 1
 
 #if __NT__
 bool load_and_decode_certificate(bytevec_t& buffer, const char* certFilePath)
@@ -33,6 +31,10 @@ bool load_and_decode_certificate(bytevec_t& buffer, const char* certFilePath)
                 }
             } while (qgetline(&line, certFile) >= 0);
         }
+        else
+        {
+            return false;
+        }
 
         qfclose(certFile);
 
@@ -51,45 +53,25 @@ static BOOL WINAPI CertAddEncodedCertificateToStore_hook(HCERTSTORE hCertStore, 
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "CertAddEncodedCertificateToStore_hook called\n");
 
-    if (s_plugin_ctx != nullptr && s_plugin_ctx->decodedCert.size() != 0)
+    if (s_plugin_ctx != nullptr && s_plugin_ctx->certificates.size() != 0)
     {
-        // inject our root certificate to certificate store
-        if (!CertAddEncodedCertificateToStore_orig(hCertStore, X509_ASN_ENCODING, &s_plugin_ctx->decodedCert[0], s_plugin_ctx->decodedCert.size(), CERT_STORE_ADD_USE_EXISTING, nullptr))
+        for (auto cert : s_plugin_ctx->certificates)
         {
-            msg(PLUGIN_PREFIX "failed to add our root certificate to certificate store!\n");
-        }
-        else
-        {
-            if ((debug & IDA_DEBUG_LUMINA) != 0)
-                msg(PLUGIN_PREFIX "added our root certificate to certificate store\n");
+            // inject our root certificate to certificate store
+            if (!CertAddEncodedCertificateToStore_orig(hCertStore, X509_ASN_ENCODING, &cert[0], cert.size(), CERT_STORE_ADD_USE_EXISTING, nullptr))
+            {
+                msg(PLUGIN_PREFIX "failed to add our root certificate to certificate store!\n");
+            }
+            else
+            {
+                if ((debug & IDA_DEBUG_LUMINA) != 0)
+                    msg(PLUGIN_PREFIX "added our root certificate to certificate store\n");
+            }
         }
     }
 
     // continue adding official root certificate to certificate store 
     return CertAddEncodedCertificateToStore_orig(hCertStore, dwCertEncodingType, pbCertEncoded, cbCertEncoded, dwAddDisposition, ppCertContext);
-}
-
-static BOOL WINAPI CertAddEncodedCertificateToStore_hook2(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext)
-{
-    if ((debug & IDA_DEBUG_LUMINA) != 0)
-        msg(PLUGIN_PREFIX "CertAddEncodedCertificateToStore_hook2 called\n");
-
-    if (s_plugin_ctx != nullptr && s_plugin_ctx->decodedCert.size() != 0)
-    {
-        // inject our root certificate to certificate store
-        if (!CertAddEncodedCertificateToStore(hCertStore, X509_ASN_ENCODING, &s_plugin_ctx->decodedCert[0], s_plugin_ctx->decodedCert.size(), CERT_STORE_ADD_USE_EXISTING, nullptr))
-        {
-            msg(PLUGIN_PREFIX "failed to add our root certificate to certificate store!\n");
-        }
-        else
-        {
-            if ((debug & IDA_DEBUG_LUMINA) != 0)
-                msg(PLUGIN_PREFIX "added our root certificate to certificate store\n");
-        }
-    }
-
-    // continue adding official root certificate to certificate store
-    return CertAddEncodedCertificateToStore(hCertStore, dwCertEncodingType, pbCertEncoded, cbCertEncoded, dwAddDisposition, ppCertContext);
 }
 #endif
 
@@ -126,26 +108,29 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "X509_STORE_add_cert_hook: %p %p\n", ctx, x);
 
-    if (s_plugin_ctx != nullptr && s_plugin_ctx->pemCert.length() != 0)
+    if (s_plugin_ctx != nullptr && s_plugin_ctx->certificates.size() != 0)
     {
-        const char* certText = s_plugin_ctx->pemCert.c_str();
-        BIO* mem = crypto.BIO_new(crypto.BIO_s_mem());;
-        crypto.BIO_puts(mem, certText);
-        X509* cert = crypto.PEM_read_bio_X509(mem, NULL, 0, NULL);
-        crypto.BIO_free(mem);
-
-        // inject our root certificate to certificate store
-        if (!crypto.X509_STORE_add_cert(ctx, cert))
+        for (auto cert : s_plugin_ctx->certificates)
         {
-            msg(PLUGIN_PREFIX "failed to add our root certificate to certificate store!\n");
-        }
-        else
-        {
-            if ((debug & IDA_DEBUG_LUMINA) != 0)
-                msg(PLUGIN_PREFIX "added our root certificate to certificate store\n");
-        }
+            const char* certText = cert.c_str();
+            BIO* mem = crypto.BIO_new(crypto.BIO_s_mem());;
+            crypto.BIO_puts(mem, certText);
+            X509* cert = crypto.PEM_read_bio_X509(mem, NULL, 0, NULL);
+            crypto.BIO_free(mem);
 
-        crypto.X509_free(cert);
+            // inject our root certificate to certificate store
+            if (!crypto.X509_STORE_add_cert(ctx, cert))
+            {
+                msg(PLUGIN_PREFIX "failed to add our root certificate to certificate store!\n");
+            }
+            else
+            {
+                if ((debug & IDA_DEBUG_LUMINA) != 0)
+                    msg(PLUGIN_PREFIX "added our root certificate to certificate store\n");
+            }
+
+            crypto.X509_free(cert);
+        }
     }
 
     // continue adding official root certificate to certificate store
@@ -196,38 +181,53 @@ bool idaapi plugin_ctx_t::run(size_t arg)
     return true;
 }
 
+struct file_enumerator_impl : file_enumerator_t
+{
+    file_enumerator_impl(plugin_ctx_t* ctx) : pc(ctx) {}
+
+    int visit_file(const char* file)
+    {
+#if __NT__
+        bytevec_t cert;
+        if (load_and_decode_certificate(cert, file))
+            pc->certificates.add(cert);
+        else
+            msg(PLUGIN_PREFIX "failed to load and decode certificate file!\n");
+#elif __LINUX__ || __MAC__
+        qstring cert;
+        if (load_certificate(cert, file))
+            pc->certificates.add(cert);
+        else
+            msg(PLUGIN_PREFIX "failed to load certificate file!\n");
+#endif
+        if ((debug & IDA_DEBUG_LUMINA) != 0)
+            msg(PLUGIN_PREFIX "loaded certificate: %s\n", file);
+        return 0;
+    }
+private:
+    plugin_ctx_t* pc = nullptr;
+};
+
 bool plugin_ctx_t::init_hook()
 {
-    char fileNameBuffer[QMAXPATH];
+    const char* ida_dir = idadir(nullptr);
 
-    auto certFileName = getsysfile(fileNameBuffer, sizeof(fileNameBuffer), "hexrays.crt", nullptr);
+    char answer[QMAXPATH];
+    file_enumerator_impl fe(this);
 
-    if (certFileName == nullptr)
+    enumerate_files(answer, sizeof(answer), ida_dir, "hexrays*.crt", fe);
+
+    if (certificates.size() == 0)
     {
-        msg(PLUGIN_PREFIX "can't find hexrays.crt file in your IDA folder!\n");
+        msg(PLUGIN_PREFIX "can't find any hexrays*.crt files in your IDA folder!\n");
         return false;
     }
-
-    if ((debug & IDA_DEBUG_LUMINA) != 0)
-        msg(PLUGIN_PREFIX "using certificate file \"%s\"\n", certFileName);
-
-#if __NT__
-    if (!load_and_decode_certificate(decodedCert, certFileName))
+    else
     {
-        msg(PLUGIN_PREFIX "failed to load and decode certificate file!\n");
-        return false;
+        if ((debug & IDA_DEBUG_LUMINA) != 0)
+            msg(PLUGIN_PREFIX "loaded %u certificates\n", certificates.size());
     }
-#elif __LINUX__ || __MAC__
-    if (!load_certificate(pemCert, certFileName))
-    {
-        msg(PLUGIN_PREFIX "failed to load certificate file!\n");
-        return false;
-    }
-#endif
-    //DetourTransactionBegin();
-    //DetourUpdateThread(GetCurrentThread());
-    //DetourAttach(&(PVOID&)CertAddEncodedCertificateToStore_orig, CertAddEncodedCertificateToStore_hook);
-    //DetourTransactionCommit();
+
     plthook_t* plthook;
 
 #if __NT__
@@ -242,7 +242,7 @@ bool plugin_ctx_t::init_hook()
         return false;
     }
 #endif
-    if (plthook_replace(plthook, "CertAddEncodedCertificateToStore", (void*)CertAddEncodedCertificateToStore_hook2, NULL) != 0) {
+    if (plthook_replace(plthook, "CertAddEncodedCertificateToStore", (void*)CertAddEncodedCertificateToStore_hook, NULL) != 0) {
         msg("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
@@ -306,16 +306,15 @@ bool plugin_ctx_t::init_hook()
 
 plugin_ctx_t::~plugin_ctx_t()
 {
-    //DetourTransactionBegin();
-    //DetourUpdateThread(GetCurrentThread());
-    //DetourDetach(&(PVOID&)CertAddEncodedCertificateToStore_orig, CertAddEncodedCertificateToStore_hook);
-    //DetourTransactionCommit();
+    // TODO: remove hooks?
 
     s_plugin_ctx = nullptr;
 }
 
 static plugmod_t* idaapi init()
 {
+    msg(PLUGIN_PREFIX "init\n");
+
     auto ctx = new plugin_ctx_t;
 
     if (ctx == nullptr)
@@ -332,6 +331,8 @@ static plugmod_t* idaapi init()
     }
 
     s_plugin_ctx = ctx;
+
+    msg(PLUGIN_PREFIX "initialized (Version: " PLUGIN_VER " by TOM_RUS)\n");
 
     return ctx;
 }

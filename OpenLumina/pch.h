@@ -7,6 +7,9 @@
 #ifndef PCH_H
 #define PCH_H
 
+//#undef __NT__
+//#define __LINUX__ 1
+
 // add headers that you want to pre-compile here
 #include "framework.h"
 
