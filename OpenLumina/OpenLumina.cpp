@@ -110,9 +110,9 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
 
     if (s_plugin_ctx != nullptr && s_plugin_ctx->certificates.size() != 0)
     {
-        for (auto cert : s_plugin_ctx->certificates)
+        for (auto certStr : s_plugin_ctx->certificates)
         {
-            const char* certText = cert.c_str();
+            const char* certText = certStr.c_str();
             BIO* mem = crypto.BIO_new(crypto.BIO_s_mem());;
             crypto.BIO_puts(mem, certText);
             X509* cert = crypto.PEM_read_bio_X509(mem, NULL, 0, NULL);
@@ -225,7 +225,7 @@ bool plugin_ctx_t::init_hook()
     else
     {
         if ((debug & IDA_DEBUG_LUMINA) != 0)
-            msg(PLUGIN_PREFIX "loaded %u certificates\n", certificates.size());
+            msg(PLUGIN_PREFIX "loaded %lu certificates\n", certificates.size());
     }
 
     plthook_t* plthook;
