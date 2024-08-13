@@ -5,7 +5,7 @@ IDA plugin that allows connecting to third party Lumina servers.
 ## Getting started
 
 1. Build or download precompiled version of the plugin and put it into your IDA\plugins directory
-2. Copy hexrays.crt certificate file provided by Lumina server owner to your IDA install directory
+2. Copy your hexrays*.crt certificate file(s) provided by Lumina server owner to your IDA install directory
 
 ## Building plugin
 
