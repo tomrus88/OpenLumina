@@ -409,6 +409,7 @@ static int plthook_open_real(plthook_t **plthook_out, uint32_t image_idx, const 
                               sec->reserved3);
                     if (strcmp(sec->segname, "__DATA_CONST") == 0 && strcmp(sec->sectname, "__got") == 0) {
                         data.got_addr = sec->addr + data.slide;
+                        DEBUG_CMD("got_addr %p\n", data.got_addr);
                     }
                     sec++;
                 }
@@ -642,6 +643,7 @@ static int read_chained_fixups(data_t *d, const struct mach_header *mh, const ch
     const struct dyld_chained_fixups_header *header = (const struct dyld_chained_fixups_header *)ptr;
     DEBUG_FIXUPS("read_chained_fixups\n"
         "d %p\n"
+        "got_addr %p\n"
         "mh %p\n"
         "dataoff %u %X\n"
         "datasize %u %X\n"
@@ -649,7 +651,7 @@ static int read_chained_fixups(data_t *d, const struct mach_header *mh, const ch
         "ptr %p\n"
         "end %p\n"
         "header %p\n",
-        d, mh,
+        d, d->got_addr, mh,
         d->chained_fixups->dataoff, d->chained_fixups->dataoff,
         d->chained_fixups->datasize, d->chained_fixups->datasize,
         image_name, ptr, end, header);
@@ -743,10 +745,11 @@ static int read_chained_fixups(data_t *d, const struct mach_header *mh, const ch
             rv = PLTHOOK_INVALID_FILE_FORMAT;
             goto cleanup;
         }
-        DEBUG_FIXUPS("  lib_ordinal %u, weak_import %u, name_offset %u (%s), addend %llu\n",
-                     imp.lib_ordinal, imp.weak_import, imp.name_offset, name, imp.addend);
+        void **addr = (void**)(d->got_addr + i * sizeof(void*));
+        DEBUG_FIXUPS("  lib_ordinal %u, weak_import %u, name_offset %u (%s), addr %p, addend %llu\n",
+                     imp.lib_ordinal, imp.weak_import, imp.name_offset, name, addr, imp.addend);
         d->plthook->entries[i].name = name;
-        d->plthook->entries[i].addr = (void**)(d->got_addr + i * sizeof(void*));
+        d->plthook->entries[i].addr = addr;
     }
 
 #ifdef PLTHOOK_DEBUG_FIXUPS
