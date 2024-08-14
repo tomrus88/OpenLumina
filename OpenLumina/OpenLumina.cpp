@@ -299,6 +299,14 @@ bool plugin_ctx_t::init_hook()
     if (dladdr((void*)dlsym_orig, &dli4))
         fprintf(stderr, "base of dlsym %s %p\n", dli4.dli_fname, dli4.dli_fbase);
 
+    Dl_info dli5;
+    if (dladdr((void*)dlopen_hook, &dli5))
+        fprintf(stderr, "base of dlopen_hook %s %p\n", dli5.dli_fname, dli5.dli_fbase);
+
+    Dl_info dli6;
+    if (dladdr((void*)dlsym_hook, &dli6))
+        fprintf(stderr, "base of dlsym_hook %s %p\n", dli6.dli_fname, dli6.dli_fbase);
+
 #endif
     plthook_close(plthook);
     fprintf(stderr, "plthook closed\n");
