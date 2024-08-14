@@ -130,7 +130,7 @@ void* dlsym_hook(void* handle, const char* symbol)
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "dlsym_hook: %p %s\n", handle, symbol);
 
-    //void* addr = dlsym(handle, symbol);
+    void* addr = dlsym(handle, symbol);
 
     //if (addr != nullptr && symbol != nullptr && strcmp(symbol, "X509_STORE_add_cert") == 0)
     //{
