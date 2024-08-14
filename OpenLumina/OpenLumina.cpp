@@ -84,9 +84,8 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
     {
         for (auto certStr : s_plugin_ctx->certificates)
         {
-            const char* certText = certStr.c_str();
             BIO* mem = crypto.BIO_new(crypto.BIO_s_mem());;
-            crypto.BIO_puts(mem, certText);
+            crypto.BIO_puts(mem, certStr.c_str());
             // may be use X509 *PEM_read_X509(FILE *fp, X509 **x, pem_password_cb *cb, void *u); instead?
             X509* cert = crypto.PEM_read_bio_X509(mem, NULL, 0, NULL);
             crypto.BIO_free(mem);
