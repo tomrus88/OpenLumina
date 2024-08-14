@@ -284,19 +284,19 @@ bool plugin_ctx_t::init_hook()
     fprintf(stderr, "old dlopen %p, old dlsym %p\n", dlopen_orig, dlsym_orig);
 
     Dl_info dli1;
-    if (dladdr(dlopen, &dli1))
+    if (dladdr((void*)dlopen, &dli1))
         fprintf(stderr, "base of dlopen %s %p\n", dli1.dli_fname, dli1.dli_fbase);
 
     Dl_info dli2;
-    if (dladdr(dlsym, &dli2))
+    if (dladdr((void*)dlsym, &dli2))
         fprintf(stderr, "base of dlsym %s %p\n", dli2.dli_fname, dli2.dli_fbase);
 
     Dl_info dli3;
-    if (dladdr(dlopen_orig, &dli3))
+    if (dladdr((void*)dlopen_orig, &dli3))
         fprintf(stderr, "base of dlopen %s %p\n", dli3.dli_fname, dli3.dli_fbase);
 
     Dl_info dli4;
-    if (dladdr(dlsym_orig, &dli4))
+    if (dladdr((void*)dlsym_orig, &dli4))
         fprintf(stderr, "base of dlsym %s %p\n", dli4.dli_fname, dli4.dli_fbase);
 
 #endif
