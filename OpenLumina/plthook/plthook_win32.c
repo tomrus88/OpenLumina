@@ -33,7 +33,6 @@
  * or implied, of the authors.
  *
  */
-
 #include <stdio.h>
 #include <stddef.h>
 #include <stdarg.h>
