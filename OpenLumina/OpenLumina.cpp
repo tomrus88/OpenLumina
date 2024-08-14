@@ -111,6 +111,7 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
 
 void* dlopen_hook(const char* filename, int flags)
 {
+    fprintf(stderr, PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
     return dlopen(filename, flags);
@@ -118,6 +119,8 @@ void* dlopen_hook(const char* filename, int flags)
 
 void* dlsym_hook(void* handle, const char* symbol)
 {
+    fprintf(stderr, PLUGIN_PREFIX "dlsym_hook enter: %p %s\n", handle, symbol);
+
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "dlsym_hook: %p %s\n", handle, symbol);
 
@@ -142,6 +145,8 @@ void* dlsym_hook(void* handle, const char* symbol)
 
         return (void*)X509_STORE_add_cert_hook;
     }
+
+    fprintf(stderr, PLUGIN_PREFIX "dlsym_hook exit: %p %s\n", handle, symbol);
 
     return addr;
 }
