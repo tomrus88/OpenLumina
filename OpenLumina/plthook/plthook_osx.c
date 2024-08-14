@@ -246,12 +246,12 @@ int plthook_open(plthook_t **plthook_out, const char *filename)
               offset = image_name_len - namelen;
             }
         }
-        fprintf(stderr, "pre strcmp");
+        fprintf(stderr, "pre strcmp\n");
         if (strcmp(image_name + offset, filename) == 0) {
             fprintf(stderr, "pre plthook_open_real");
             return plthook_open_real(plthook_out, idx, NULL, image_name);
         }
-        fprintf(stderr, "post strcmp");
+        fprintf(stderr, "post strcmp\n");
     }
     *plthook_out = NULL;
     set_errmsg("Cannot find file: %s", filename);
@@ -509,9 +509,9 @@ static int plthook_open_real(plthook_t **plthook_out, uint32_t image_idx, const 
         return PLTHOOK_INVALID_FILE_FORMAT;
     }
     if (data.chained_fixups != NULL) {
-        fprintf(stderr, "pre read_chained_fixups");
+        fprintf(stderr, "pre read_chained_fixups\n");
         int rv = read_chained_fixups(&data, mh, image_name);
-        fprintf(stderr, "post read_chained_fixups");
+        fprintf(stderr, "post read_chained_fixups\n");
         if (rv != 0) {
             return rv;
         }
@@ -526,7 +526,7 @@ static int plthook_open_real(plthook_t **plthook_out, uint32_t image_idx, const 
         data.plthook->num_entries = nbind;
         set_bind_addrs(&data, lazy_bind_off, lazy_bind_size);
     }
-    fprintf(stderr, "pre set_mem_prot");
+    fprintf(stderr, "pre set_mem_prot\n");
     set_mem_prot(data.plthook);
 
     *plthook_out = data.plthook;
