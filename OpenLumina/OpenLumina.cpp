@@ -111,6 +111,8 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
     return crypto.X509_STORE_add_cert(ctx, x);
 }
 
+static void* (dlopen_orig)(const char* filename, int flags) = dlopen;
+
 void* dlopen_hook(const char* filename, int flags)
 {
     //qeprintf("dlopen_hook\n");
@@ -120,8 +122,10 @@ void* dlopen_hook(const char* filename, int flags)
     //    qeprintf("dlopen_hook: %s %u\n", filename, flags);
     //if ((debug & IDA_DEBUG_LUMINA) != 0)
     //    msg(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
-    return dlopen(filename, flags);
+    return dlopen_orig(filename, flags);
 }
+
+static void* (dlsym_orig)(void* handle, const char* symbol) = dlsym;
 
 void* dlsym_hook(void* handle, const char* symbol)
 {
@@ -130,7 +134,7 @@ void* dlsym_hook(void* handle, const char* symbol)
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "dlsym_hook: %p %s\n", handle, symbol);
 
-    void* addr = dlsym(handle, symbol);
+    void* addr = dlsym_orig(handle, symbol);
 
     //if (addr != nullptr && symbol != nullptr && strcmp(symbol, "X509_STORE_add_cert") == 0)
     //{
