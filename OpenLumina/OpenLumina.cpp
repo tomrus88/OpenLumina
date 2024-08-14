@@ -77,8 +77,6 @@ static openssl_ctx crypto;
 
 int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
 {
-    //qeprintf("X509_STORE_add_cert_hook\n");
-
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "X509_STORE_add_cert_hook: %p %p\n", ctx, x);
 
@@ -115,8 +113,6 @@ static void* (*dlopen_orig)(const char* filename, int flags) = dlopen;
 
 void* dlopen_hook(const char* filename, int flags)
 {
-    fprintf(stderr, "dlopen_hook: %s %u, filename, flags\n");
-
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
 
@@ -127,8 +123,6 @@ static void* (*dlsym_orig)(void* handle, const char* symbol) = dlsym;
 
 void* dlsym_hook(void* handle, const char* symbol)
 {
-    fprintf(stderr, "dlsym_hook enter: %p %s\n", handle, symbol);
-
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "dlsym_hook: %p %s\n", handle, symbol);
 
@@ -153,8 +147,6 @@ void* dlsym_hook(void* handle, const char* symbol)
 
         return (void*)X509_STORE_add_cert_hook;
     }
-
-    fprintf(stderr, "dlsym_hook exit: %p %s\n", handle, symbol);
 
     return addr;
 }
@@ -258,7 +250,6 @@ bool plugin_ctx_t::init_hook()
 
 #if __MAC__
 #if __EA64__
-    fprintf(stderr, "plthook start\n");
     if (plthook_open(&plthook, "libida64.dylib") != 0) {
         msg("plthook_open error: %s\n", plthook_error());
         return false;
@@ -269,7 +260,6 @@ bool plugin_ctx_t::init_hook()
         return false;
     }
 #endif
-    fprintf(stderr, "old dlopen %p, old dlsym %p\n", dlopen_orig, dlsym_orig);
     if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, nullptr) != 0) {
         msg("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
@@ -280,36 +270,9 @@ bool plugin_ctx_t::init_hook()
         plthook_close(plthook);
         return false;
     }
-    fprintf(stderr, "plthook end\n");
-    fprintf(stderr, "old dlopen %p, old dlsym %p\n", dlopen_orig, dlsym_orig);
-
-    Dl_info dli1;
-    if (dladdr((void*)dlopen, &dli1))
-        fprintf(stderr, "base of dlopen %s %p\n", dli1.dli_fname, dli1.dli_fbase);
-
-    Dl_info dli2;
-    if (dladdr((void*)dlsym, &dli2))
-        fprintf(stderr, "base of dlsym %s %p\n", dli2.dli_fname, dli2.dli_fbase);
-
-    Dl_info dli3;
-    if (dladdr((void*)dlopen_orig, &dli3))
-        fprintf(stderr, "base of dlopen %s %p\n", dli3.dli_fname, dli3.dli_fbase);
-
-    Dl_info dli4;
-    if (dladdr((void*)dlsym_orig, &dli4))
-        fprintf(stderr, "base of dlsym %s %p\n", dli4.dli_fname, dli4.dli_fbase);
-
-    Dl_info dli5;
-    if (dladdr((void*)dlopen_hook, &dli5))
-        fprintf(stderr, "base of dlopen_hook %s %p\n", dli5.dli_fname, dli5.dli_fbase);
-
-    Dl_info dli6;
-    if (dladdr((void*)dlsym_hook, &dli6))
-        fprintf(stderr, "base of dlsym_hook %s %p\n", dli6.dli_fname, dli6.dli_fbase);
-
 #endif
+
     plthook_close(plthook);
-    fprintf(stderr, "plthook closed\n");
 
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "certificate hook applied\n");
@@ -343,13 +306,9 @@ static plugmod_t* idaapi init()
         return nullptr;
     }
 
-    fprintf(stderr, "init_hook done\n");
-
     s_plugin_ctx = ctx;
 
     msg(PLUGIN_PREFIX "initialized (Version: " PLUGIN_VER " by TOM_RUS)\n");
-
-    fprintf(stderr, "plugin init exit\n");
 
     return ctx;
 }
