@@ -628,14 +628,16 @@ static void set_bind_addr(data_t *data, unsigned int *idx, const char *sym_name,
 
 static int read_chained_fixups(data_t *d, const struct mach_header *mh, const char *image_name)
 {
-    const uint8_t *ptr = (const uint8_t *)mh + d->chained_fixups->dataoff;
+    struct segment_command_64* linkedit = d->segments[d->linkedit_segment_idx];
+    const uint8_t* ptr = (uint8_t*)(linkedit->vmaddr - linkedit->fileoff + d->slide + d->chained_fixups->dataoff);
+    //const uint8_t *ptr = (const uint8_t *)mh + d->chained_fixups->dataoff;
     const uint8_t *end = ptr + d->chained_fixups->datasize;
     const struct dyld_chained_fixups_header *header = (const struct dyld_chained_fixups_header *)ptr;
     DEBUG_FIXUPS("read_chained_fixups\n"
         "d %p\n"
         "mh %p\n"
-        "dataoff %u %X"
-        "datasize %u %X"
+        "dataoff %u %X\n"
+        "datasize %u %X\n"
         "image_name %s\n"
         "ptr %p\n"
         "end %p\n"
