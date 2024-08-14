@@ -113,13 +113,13 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
 
 void* dlopen_hook(const char* filename, int flags)
 {
-    qeprintf("dlopen_hook\n");
-    if (filename == nullptr)
-        qeprintf("dlopen_hook: filename == nullptr\n");
-    else
-        qeprintf("dlopen_hook: %s %u\n", filename, flags);
-    if ((debug & IDA_DEBUG_LUMINA) != 0)
-        msg(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
+    //qeprintf("dlopen_hook\n");
+    //if (filename == nullptr)
+    //    qeprintf("dlopen_hook: filename == nullptr\n");
+    //else
+    //    qeprintf("dlopen_hook: %s %u\n", filename, flags);
+    //if ((debug & IDA_DEBUG_LUMINA) != 0)
+    //    msg(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
     return dlopen(filename, flags);
 }
 
@@ -267,11 +267,11 @@ bool plugin_ctx_t::init_hook()
         return false;
     }
 #endif
-    if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, NULL) != 0) {
-        msg("plthook_replace error: %s\n", plthook_error());
-        plthook_close(plthook);
-        return false;
-    }
+    //if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, NULL) != 0) {
+    //    msg("plthook_replace error: %s\n", plthook_error());
+    //    plthook_close(plthook);
+    //    return false;
+    //}
     if (plthook_replace(plthook, "dlsym", (void*)dlsym_hook, NULL) != 0) {
         msg("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
