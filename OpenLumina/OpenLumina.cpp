@@ -77,7 +77,7 @@ static openssl_ctx crypto;
 
 int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
 {
-    qeprintf(PLUGIN_PREFIX "X509_STORE_add_cert_hook\n", filename, flags);
+    qeprintf("X509_STORE_add_cert_hook\n");
 
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "X509_STORE_add_cert_hook: %p %p\n", ctx, x);
