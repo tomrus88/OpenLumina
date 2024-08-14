@@ -248,7 +248,7 @@ int plthook_open(plthook_t **plthook_out, const char *filename)
         }
         fprintf(stderr, "pre strcmp\n");
         if (strcmp(image_name + offset, filename) == 0) {
-            fprintf(stderr, "pre plthook_open_real");
+            fprintf(stderr, "pre plthook_open_real\n");
             return plthook_open_real(plthook_out, idx, NULL, image_name);
         }
         fprintf(stderr, "post strcmp\n");
@@ -528,6 +528,7 @@ static int plthook_open_real(plthook_t **plthook_out, uint32_t image_idx, const 
     }
     fprintf(stderr, "pre set_mem_prot\n");
     set_mem_prot(data.plthook);
+    fprintf(stderr, "post set_mem_prot\n");
 
     *plthook_out = data.plthook;
     return 0;
@@ -1073,6 +1074,7 @@ int plthook_enum_with_prot(plthook_t *plthook, unsigned int *pos, const char **n
 
 int plthook_replace(plthook_t *plthook, const char *funcname, void *funcaddr, void **oldfunc)
 {
+    fprintf(stderr, "in plthook_replace\n");
     size_t funcnamelen = strlen(funcname);
     unsigned int pos = 0;
     const char *name;

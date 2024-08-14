@@ -123,7 +123,7 @@ void* dlsym_hook(void* handle, const char* symbol)
 
     void* addr = dlsym(handle, symbol);
 
-    if (addr != nullptr && strcmp(symbol, "X509_STORE_add_cert") == 0)
+    if (addr != nullptr && symbol != nullptr && strcmp(symbol, "X509_STORE_add_cert") == 0)
     {
         crypto.BIO_s_mem = (BIO_s_mem_fptr)dlsym(handle, "BIO_s_mem");
         crypto.BIO_new = (BIO_new_fptr)dlsym(handle, "BIO_new");
