@@ -454,6 +454,9 @@ static int plthook_open_real(plthook_t **plthook_out, uint32_t image_idx, const 
         case LC_UUID: /* 0x1b */
             DEBUG_CMD("LC_UUID\n");
             break;
+        case LC_RPATH: /* 0x1c|LC_REQ_DYLD */
+            DEBUG_CMD("LC_RPATH\n");
+            break;
         case LC_CODE_SIGNATURE: /* 0x1d */
             DEBUG_CMD("LC_CODE_SIGNATURE\n");
             break;
@@ -628,6 +631,14 @@ static int read_chained_fixups(data_t *d, const struct mach_header *mh, const ch
     const uint8_t *ptr = (const uint8_t *)mh + d->chained_fixups->dataoff;
     const uint8_t *end = ptr + d->chained_fixups->datasize;
     const struct dyld_chained_fixups_header *header = (const struct dyld_chained_fixups_header *)ptr;
+    DEBUG_FIXUPS("read_chained_fixups\n"
+        "d %p\n"
+        "mh %p",
+        "image_name %s",
+        "ptr %p\n"
+        "end %p\n"
+        "header %p"
+    );
     const struct dyld_chained_import *import = (const struct dyld_chained_import *)(ptr + header->imports_offset);
     const struct dyld_chained_import_addend *import_addend = (const struct dyld_chained_import_addend *)(ptr + header->imports_offset);
     const struct dyld_chained_import_addend64 *import_addend64 = (const struct dyld_chained_import_addend64 *)(ptr + header->imports_offset);
