@@ -659,6 +659,7 @@ static int read_chained_fixups(data_t *d, const struct mach_header *mh, const ch
     const struct dyld_chained_import_addend *import_addend = (const struct dyld_chained_import_addend *)(ptr + header->imports_offset);
     const struct dyld_chained_import_addend64 *import_addend64 = (const struct dyld_chained_import_addend64 *)(ptr + header->imports_offset);
     const char *symbol_pool = (const char*)ptr + header->symbols_offset;
+    DEBUG_FIXUPS("symbol_pool %p\n", symbol_pool);
     int rv = PLTHOOK_INTERNAL_ERROR;
     size_t size;
     uint32_t i;
@@ -1133,7 +1134,7 @@ matched:
             if (dladdr((void*)addr, &dli6))
                 fprintf(stderr, "base of %s %s %p\n", funcname, dli6.dli_fname, dli6.dli_fbase);
 
-            addr += 0x30;
+            //addr += 0x30;
 
             fprintf(stderr, "replacing %p with %p at %p\n", *addr, funcaddr, addr);
             *addr = funcaddr;
