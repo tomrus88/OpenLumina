@@ -747,7 +747,7 @@ static int read_chained_fixups(data_t *d, const struct mach_header *mh, const ch
             goto cleanup;
         }
         void **addr = (void**)(d->got_addr + i * sizeof(void*));
-        void* addr_rva = addr - d->slide;
+        intptr_t addr_rva = (intptr_t)addr - d->slide;
         DEBUG_FIXUPS("[%u]  lib_ordinal %u, weak_import %u, name_offset %u name_addr %p (%s), addr %p %p, addend %llu\n",
             i, imp.lib_ordinal, imp.weak_import, imp.name_offset, name, name, addr, addr_rva, imp.addend);
         d->plthook->entries[i].name = name;
