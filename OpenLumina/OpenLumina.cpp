@@ -269,6 +269,7 @@ bool plugin_ctx_t::init_hook()
         return false;
     }
 #endif
+    fprintf(stderr, "old dlopen %p, old dlsym %p\n", dlopen_orig, dlsym_orig);
     if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, nullptr) != 0) {
         msg("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
@@ -280,6 +281,7 @@ bool plugin_ctx_t::init_hook()
         return false;
     }
     fprintf(stderr, "plthook end\n");
+    fprintf(stderr, "old dlopen %p, old dlsym %p\n", dlopen_orig, dlsym_orig);
 #endif
     plthook_close(plthook);
     fprintf(stderr, "plthook closed\n");
