@@ -633,12 +633,12 @@ static int read_chained_fixups(data_t *d, const struct mach_header *mh, const ch
     const struct dyld_chained_fixups_header *header = (const struct dyld_chained_fixups_header *)ptr;
     DEBUG_FIXUPS("read_chained_fixups\n"
         "d %p\n"
-        "mh %p",
-        "image_name %s",
+        "mh %p\n",
+        "image_name %s\n",
         "ptr %p\n"
         "end %p\n"
-        "header %p"
-    );
+        "header %p\n",
+        d, mh, image_name, ptr, end, header);
     const struct dyld_chained_import *import = (const struct dyld_chained_import *)(ptr + header->imports_offset);
     const struct dyld_chained_import_addend *import_addend = (const struct dyld_chained_import_addend *)(ptr + header->imports_offset);
     const struct dyld_chained_import_addend64 *import_addend64 = (const struct dyld_chained_import_addend64 *)(ptr + header->imports_offset);
