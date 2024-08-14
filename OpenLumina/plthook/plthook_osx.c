@@ -506,7 +506,9 @@ static int plthook_open_real(plthook_t **plthook_out, uint32_t image_idx, const 
         return PLTHOOK_INVALID_FILE_FORMAT;
     }
     if (data.chained_fixups != NULL) {
+        fprintf(stderr, "pre read_chained_fixups");
         int rv = read_chained_fixups(&data, mh, image_name);
+        fprintf(stderr, "post read_chained_fixups");
         if (rv != 0) {
             return rv;
         }
@@ -521,6 +523,7 @@ static int plthook_open_real(plthook_t **plthook_out, uint32_t image_idx, const 
         data.plthook->num_entries = nbind;
         set_bind_addrs(&data, lazy_bind_off, lazy_bind_size);
     }
+    fprintf(stderr, "pre set_mem_prot");
     set_mem_prot(data.plthook);
 
     *plthook_out = data.plthook;
