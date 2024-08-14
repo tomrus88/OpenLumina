@@ -77,7 +77,7 @@ static openssl_ctx crypto;
 
 int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
 {
-    qeprintf("X509_STORE_add_cert_hook\n");
+    //qeprintf("X509_STORE_add_cert_hook\n");
 
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "X509_STORE_add_cert_hook: %p %p\n", ctx, x);
@@ -256,7 +256,7 @@ bool plugin_ctx_t::init_hook()
 
 #if __MAC__
 #if __EA64__
-    qeprintf("plthook start\n");
+    //qeprintf("plthook start\n");
     if (plthook_open(&plthook, "libida64.dylib") != 0) {
         msg("plthook_open error: %s\n", plthook_error());
         return false;
@@ -277,10 +277,10 @@ bool plugin_ctx_t::init_hook()
         plthook_close(plthook);
         return false;
     }
-    qeprintf("plthook end\n");
+    //qeprintf("plthook end\n");
 #endif
     plthook_close(plthook);
-    qeprintf("plthook closed\n");
+    //qeprintf("plthook closed\n");
 
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "certificate hook applied\n");
@@ -314,13 +314,13 @@ static plugmod_t* idaapi init()
         return nullptr;
     }
 
-    qeprintf("init_hook done\n");
+    //qeprintf("init_hook done\n");
 
     s_plugin_ctx = ctx;
 
     msg(PLUGIN_PREFIX "initialized (Version: " PLUGIN_VER " by TOM_RUS)\n");
 
-    qeprintf("plugin init exit\n");
+    //qeprintf("plugin init exit\n");
 
     return ctx;
 }
