@@ -267,11 +267,11 @@ bool plugin_ctx_t::init_hook()
         return false;
     }
 #endif
-    //if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, NULL) != 0) {
-    //    msg("plthook_replace error: %s\n", plthook_error());
-    //    plthook_close(plthook);
-    //    return false;
-    //}
+    if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, NULL) != 0) {
+        msg("plthook_replace error: %s\n", plthook_error());
+        plthook_close(plthook);
+        return false;
+    }
     if (plthook_replace(plthook, "dlsym", (void*)dlsym_hook, NULL) != 0) {
         msg("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
