@@ -1125,11 +1125,11 @@ matched:
                 set_errmsg("Cannot change memory protection at address %p", base);
                 return PLTHOOK_INTERNAL_ERROR;
             }
-            fprintf(stderr, "replacing %p to %p at $p\n", *addr, funcaddr, addr);
+            fprintf(stderr, "replacing %p with %p at %p\n", *addr, funcaddr, addr);
             *addr = funcaddr;
             mprotect(base, page_size, prot);
         } else {
-            fprintf(stderr, "replacing %p to %p at $p\n", *addr, funcaddr, addr);
+            fprintf(stderr, "replacing %p with %p at %p\n", *addr, funcaddr, addr);
             *addr = funcaddr;
         }
         return 0;

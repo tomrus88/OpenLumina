@@ -115,13 +115,11 @@ static void* (*dlopen_orig)(const char* filename, int flags) = dlopen;
 
 void* dlopen_hook(const char* filename, int flags)
 {
-    //qeprintf("dlopen_hook\n");
-    //if (filename == nullptr)
-    //    qeprintf("dlopen_hook: filename == nullptr\n");
-    //else
-    //    qeprintf("dlopen_hook: %s %u\n", filename, flags);
-    //if ((debug & IDA_DEBUG_LUMINA) != 0)
-    //    msg(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
+    fprintf(stderr, "dlopen_hook: %s %u, filename, flags\n");
+
+    if ((debug & IDA_DEBUG_LUMINA) != 0)
+        msg(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
+
     return dlopen_orig(filename, flags);
 }
 
@@ -129,34 +127,34 @@ static void* (*dlsym_orig)(void* handle, const char* symbol) = dlsym;
 
 void* dlsym_hook(void* handle, const char* symbol)
 {
-    //qeprintf("dlsym_hook enter: %p %s\n", handle, symbol);
+    fprintf(stderr, "dlsym_hook enter: %p %s\n", handle, symbol);
 
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "dlsym_hook: %p %s\n", handle, symbol);
 
     void* addr = dlsym_orig(handle, symbol);
 
-    //if (addr != nullptr && symbol != nullptr && strcmp(symbol, "X509_STORE_add_cert") == 0)
-    //{
-    //    crypto.BIO_s_mem = (BIO_s_mem_fptr)dlsym(handle, "BIO_s_mem");
-    //    crypto.BIO_new = (BIO_new_fptr)dlsym(handle, "BIO_new");
-    //    crypto.BIO_puts = (BIO_puts_fptr)dlsym(handle, "BIO_puts");
-    //    crypto.PEM_read_bio_X509 = (PEM_read_bio_X509_fptr)dlsym(handle, "PEM_read_bio_X509");
-    //    crypto.BIO_free = (BIO_free_fptr)dlsym(handle, "BIO_free");
-    //    crypto.X509_STORE_add_cert = (X509_STORE_add_cert_fptr)addr;
-    //    crypto.X509_free = (X509_free_fptr)dlsym(handle, "X509_free");
+    if (addr != nullptr && symbol != nullptr && strcmp(symbol, "X509_STORE_add_cert") == 0)
+    {
+        crypto.BIO_s_mem = (BIO_s_mem_fptr)dlsym(handle, "BIO_s_mem");
+        crypto.BIO_new = (BIO_new_fptr)dlsym(handle, "BIO_new");
+        crypto.BIO_puts = (BIO_puts_fptr)dlsym(handle, "BIO_puts");
+        crypto.PEM_read_bio_X509 = (PEM_read_bio_X509_fptr)dlsym(handle, "PEM_read_bio_X509");
+        crypto.BIO_free = (BIO_free_fptr)dlsym(handle, "BIO_free");
+        crypto.X509_STORE_add_cert = (X509_STORE_add_cert_fptr)addr;
+        crypto.X509_free = (X509_free_fptr)dlsym(handle, "X509_free");
 
-    //    if ((debug & IDA_DEBUG_LUMINA) != 0)
-    //        msg("openssl: BIO_s_mem %p BIO_new %p BIO_puts %p PEM_read_bio_X509 %p BIO_free %p X509_STORE_add_cert %p X509_free %p",
-    //            crypto.BIO_s_mem, crypto.BIO_new, crypto.BIO_puts, crypto.PEM_read_bio_X509, crypto.BIO_free, crypto.X509_STORE_add_cert, crypto.X509_free);
+        if ((debug & IDA_DEBUG_LUMINA) != 0)
+            msg("openssl: BIO_s_mem %p BIO_new %p BIO_puts %p PEM_read_bio_X509 %p BIO_free %p X509_STORE_add_cert %p X509_free %p",
+                crypto.BIO_s_mem, crypto.BIO_new, crypto.BIO_puts, crypto.PEM_read_bio_X509, crypto.BIO_free, crypto.X509_STORE_add_cert, crypto.X509_free);
 
-    //    if ((debug & IDA_DEBUG_LUMINA) != 0)
-    //        msg(PLUGIN_PREFIX "returned %p for X509_STORE_add_cert\n", (void*)X509_STORE_add_cert_hook);
+        if ((debug & IDA_DEBUG_LUMINA) != 0)
+            msg(PLUGIN_PREFIX "returned %p for X509_STORE_add_cert\n", (void*)X509_STORE_add_cert_hook);
 
-    //    return (void*)X509_STORE_add_cert_hook;
-    //}
+        return (void*)X509_STORE_add_cert_hook;
+    }
 
-    //qeprintf("dlsym_hook exit: %p %s\n", handle, symbol);
+    fprintf(stderr, "dlsym_hook exit: %p %s\n", handle, symbol);
 
     return addr;
 }
@@ -260,7 +258,7 @@ bool plugin_ctx_t::init_hook()
 
 #if __MAC__
 #if __EA64__
-    //qeprintf("plthook start\n");
+    fprintf(stderr, "plthook start\n");
     if (plthook_open(&plthook, "libida64.dylib") != 0) {
         msg("plthook_open error: %s\n", plthook_error());
         return false;
@@ -281,10 +279,10 @@ bool plugin_ctx_t::init_hook()
         plthook_close(plthook);
         return false;
     }
-    //qeprintf("plthook end\n");
+    fprintf(stderr, "plthook end\n");
 #endif
     plthook_close(plthook);
-    //qeprintf("plthook closed\n");
+    fprintf(stderr, "plthook closed\n");
 
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "certificate hook applied\n");
@@ -318,13 +316,13 @@ static plugmod_t* idaapi init()
         return nullptr;
     }
 
-    //qeprintf("init_hook done\n");
+    fprintf(stderr, "init_hook done\n");
 
     s_plugin_ctx = ctx;
 
     msg(PLUGIN_PREFIX "initialized (Version: " PLUGIN_VER " by TOM_RUS)\n");
 
-    //qeprintf("plugin init exit\n");
+    fprintf(stderr, "plugin init exit\n");
 
     return ctx;
 }

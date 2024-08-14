@@ -9,6 +9,9 @@
 
 //#undef __NT__
 //#define __LINUX__ 1
+//#define __MAC__ 1
+
+#define USE_STANDARD_FILE_FUNCTIONS
 
 // add headers that you want to pre-compile here
 #include "framework.h"
