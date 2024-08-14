@@ -111,7 +111,7 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
     return crypto.X509_STORE_add_cert(ctx, x);
 }
 
-static void* (dlopen_orig)(const char* filename, int flags) = dlopen;
+static void* (*dlopen_orig)(const char* filename, int flags) = dlopen;
 
 void* dlopen_hook(const char* filename, int flags)
 {
@@ -125,7 +125,7 @@ void* dlopen_hook(const char* filename, int flags)
     return dlopen_orig(filename, flags);
 }
 
-static void* (dlsym_orig)(void* handle, const char* symbol) = dlsym;
+static void* (*dlsym_orig)(void* handle, const char* symbol) = dlsym;
 
 void* dlsym_hook(void* handle, const char* symbol)
 {
