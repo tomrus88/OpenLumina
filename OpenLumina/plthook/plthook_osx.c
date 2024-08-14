@@ -1130,6 +1130,8 @@ matched:
             if (dladdr((void*)addr, &dli6))
                 fprintf(stderr, "base of %s %s %p\n", funcname, dli6.dli_fname, dli6.dli_fbase);
 
+            addr += 0x30;
+
             fprintf(stderr, "replacing %p with %p at %p\n", *addr, funcaddr, addr);
             *addr = funcaddr;
             mprotect(base, page_size, prot);
