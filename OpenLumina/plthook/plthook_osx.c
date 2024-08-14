@@ -246,9 +246,12 @@ int plthook_open(plthook_t **plthook_out, const char *filename)
               offset = image_name_len - namelen;
             }
         }
+        fprintf(stderr, "pre strcmp");
         if (strcmp(image_name + offset, filename) == 0) {
+            fprintf(stderr, "pre plthook_open_real");
             return plthook_open_real(plthook_out, idx, NULL, image_name);
         }
+        fprintf(stderr, "post strcmp");
     }
     *plthook_out = NULL;
     set_errmsg("Cannot find file: %s", filename);
