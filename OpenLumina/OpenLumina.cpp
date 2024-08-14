@@ -113,7 +113,11 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
 
 void* dlopen_hook(const char* filename, int flags)
 {
-    qeprintf(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
+    qeprintf("dlopen_hook\n");
+    if (filename == nullptr)
+        qeprintf("dlopen_hook: filename == nullptr\n");
+    else
+        qeprintf("dlopen_hook: %s %u\n", filename, flags);
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
     return dlopen(filename, flags);
