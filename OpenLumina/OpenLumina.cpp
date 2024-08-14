@@ -130,27 +130,27 @@ void* dlsym_hook(void* handle, const char* symbol)
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "dlsym_hook: %p %s\n", handle, symbol);
 
-    void* addr = dlsym(handle, symbol);
+    //void* addr = dlsym(handle, symbol);
 
-    if (addr != nullptr && symbol != nullptr && strcmp(symbol, "X509_STORE_add_cert") == 0)
-    {
-        crypto.BIO_s_mem = (BIO_s_mem_fptr)dlsym(handle, "BIO_s_mem");
-        crypto.BIO_new = (BIO_new_fptr)dlsym(handle, "BIO_new");
-        crypto.BIO_puts = (BIO_puts_fptr)dlsym(handle, "BIO_puts");
-        crypto.PEM_read_bio_X509 = (PEM_read_bio_X509_fptr)dlsym(handle, "PEM_read_bio_X509");
-        crypto.BIO_free = (BIO_free_fptr)dlsym(handle, "BIO_free");
-        crypto.X509_STORE_add_cert = (X509_STORE_add_cert_fptr)addr;
-        crypto.X509_free = (X509_free_fptr)dlsym(handle, "X509_free");
+    //if (addr != nullptr && symbol != nullptr && strcmp(symbol, "X509_STORE_add_cert") == 0)
+    //{
+    //    crypto.BIO_s_mem = (BIO_s_mem_fptr)dlsym(handle, "BIO_s_mem");
+    //    crypto.BIO_new = (BIO_new_fptr)dlsym(handle, "BIO_new");
+    //    crypto.BIO_puts = (BIO_puts_fptr)dlsym(handle, "BIO_puts");
+    //    crypto.PEM_read_bio_X509 = (PEM_read_bio_X509_fptr)dlsym(handle, "PEM_read_bio_X509");
+    //    crypto.BIO_free = (BIO_free_fptr)dlsym(handle, "BIO_free");
+    //    crypto.X509_STORE_add_cert = (X509_STORE_add_cert_fptr)addr;
+    //    crypto.X509_free = (X509_free_fptr)dlsym(handle, "X509_free");
 
-        if ((debug & IDA_DEBUG_LUMINA) != 0)
-            msg("openssl: BIO_s_mem %p BIO_new %p BIO_puts %p PEM_read_bio_X509 %p BIO_free %p X509_STORE_add_cert %p X509_free %p",
-                crypto.BIO_s_mem, crypto.BIO_new, crypto.BIO_puts, crypto.PEM_read_bio_X509, crypto.BIO_free, crypto.X509_STORE_add_cert, crypto.X509_free);
+    //    if ((debug & IDA_DEBUG_LUMINA) != 0)
+    //        msg("openssl: BIO_s_mem %p BIO_new %p BIO_puts %p PEM_read_bio_X509 %p BIO_free %p X509_STORE_add_cert %p X509_free %p",
+    //            crypto.BIO_s_mem, crypto.BIO_new, crypto.BIO_puts, crypto.PEM_read_bio_X509, crypto.BIO_free, crypto.X509_STORE_add_cert, crypto.X509_free);
 
-        if ((debug & IDA_DEBUG_LUMINA) != 0)
-            msg(PLUGIN_PREFIX "returned %p for X509_STORE_add_cert\n", (void*)X509_STORE_add_cert_hook);
+    //    if ((debug & IDA_DEBUG_LUMINA) != 0)
+    //        msg(PLUGIN_PREFIX "returned %p for X509_STORE_add_cert\n", (void*)X509_STORE_add_cert_hook);
 
-        return (void*)X509_STORE_add_cert_hook;
-    }
+    //    return (void*)X509_STORE_add_cert_hook;
+    //}
 
     //qeprintf("dlsym_hook exit: %p %s\n", handle, symbol);
 
