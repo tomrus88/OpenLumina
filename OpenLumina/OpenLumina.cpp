@@ -7,75 +7,6 @@
 
 static plugin_ctx_t* s_plugin_ctx = nullptr;
 
-#if __NT__
-bool load_and_decode_certificate(bytevec_t& buffer, const char* certFilePath)
-{
-    auto certFile = fopenRT(certFilePath);
-
-    if (certFile != nullptr)
-    {
-        qstring cert;
-        qstring line;
-
-        if (qgetline(&line, certFile) >= 0)
-        {
-            do
-            {
-                if (strcmp(line.c_str(), "-----BEGIN CERTIFICATE-----"))
-                {
-                    if (!strcmp(line.c_str(), "-----END CERTIFICATE-----"))
-                        break;
-
-                    if (line.length())
-                        cert += line;
-                }
-            } while (qgetline(&line, certFile) >= 0);
-        }
-        else
-        {
-            return false;
-        }
-
-        qfclose(certFile);
-
-        if ((debug & IDA_DEBUG_LUMINA) != 0)
-            msg(PLUGIN_PREFIX "load_and_decode_certificate: %s\n", cert.c_str());
-
-        return base64_decode(&buffer, cert.c_str(), cert.length());
-    }
-    return false;
-}
-
-static BOOL(WINAPI* CertAddEncodedCertificateToStore_orig)(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext) = CertAddEncodedCertificateToStore;
-
-static BOOL WINAPI CertAddEncodedCertificateToStore_hook(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext)
-{
-    if ((debug & IDA_DEBUG_LUMINA) != 0)
-        msg(PLUGIN_PREFIX "CertAddEncodedCertificateToStore_hook called\n");
-
-    if (s_plugin_ctx != nullptr && s_plugin_ctx->certificates.size() != 0)
-    {
-        for (auto cert : s_plugin_ctx->certificates)
-        {
-            // inject our root certificate to certificate store
-            if (!CertAddEncodedCertificateToStore_orig(hCertStore, X509_ASN_ENCODING, &cert[0], cert.size(), CERT_STORE_ADD_USE_EXISTING, nullptr))
-            {
-                msg(PLUGIN_PREFIX "failed to add our root certificate to certificate store!\n");
-            }
-            else
-            {
-                if ((debug & IDA_DEBUG_LUMINA) != 0)
-                    msg(PLUGIN_PREFIX "added our root certificate to certificate store\n");
-            }
-        }
-    }
-
-    // continue adding official root certificate to certificate store 
-    return CertAddEncodedCertificateToStore_orig(hCertStore, dwCertEncodingType, pbCertEncoded, cbCertEncoded, dwAddDisposition, ppCertContext);
-}
-#endif
-
-#if __LINUX__ || __MAC__
 bool load_certificate(qstring& buffer, const char* certFilePath)
 {
     auto certFile = fopenRT(certFilePath);
@@ -91,7 +22,7 @@ bool load_certificate(qstring& buffer, const char* certFilePath)
         qfclose(certFile);
 
         if ((debug & IDA_DEBUG_LUMINA) != 0)
-            msg(PLUGIN_PREFIX "load_certificate: %s %lu %lu\n", buffer.c_str(), buffer.length(), buffer.size());
+            msg(PLUGIN_PREFIX "load_certificate:\n%s\nlength %lu\nsize %lu\n", buffer.c_str(), buffer.length(), buffer.size());
 
         bool hasHeader = strstr(buffer.c_str(), "-----BEGIN CERTIFICATE-----") != nullptr;
         bool hasFooter = strstr(buffer.c_str(), "-----END CERTIFICATE-----") != nullptr;
@@ -101,6 +32,47 @@ bool load_certificate(qstring& buffer, const char* certFilePath)
     return false;
 }
 
+#if __NT__
+static BOOL(WINAPI* CertAddEncodedCertificateToStore_orig)(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext) = CertAddEncodedCertificateToStore;
+
+static BOOL WINAPI CertAddEncodedCertificateToStore_hook(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext)
+{
+    if ((debug & IDA_DEBUG_LUMINA) != 0)
+        msg(PLUGIN_PREFIX "CertAddEncodedCertificateToStore_hook called\n");
+
+    if (s_plugin_ctx != nullptr && s_plugin_ctx->certificates.size() != 0)
+    {
+        for (auto cert : s_plugin_ctx->certificates)
+        {
+            DWORD pubKeySize = 2048;
+            uint8_t pubKey[2048];
+
+            if (CryptStringToBinaryA(cert.c_str(), cert.size(), CRYPT_STRING_BASE64HEADER, pubKey, &pubKeySize, NULL, NULL))
+            {
+                // inject our root certificate to certificate store
+                if (CertAddEncodedCertificateToStore_orig(hCertStore, X509_ASN_ENCODING, pubKey, pubKeySize, CERT_STORE_ADD_USE_EXISTING, nullptr))
+                {
+                    if ((debug & IDA_DEBUG_LUMINA) != 0)
+                        msg(PLUGIN_PREFIX "added our root certificate to certificate store\n");
+                }
+                else
+                {
+                    msg(PLUGIN_PREFIX "failed to add our root certificate to certificate store!\n");
+                }
+            }
+            else
+            {
+                msg(PLUGIN_PREFIX "failed to decode our root certificate from string to binary!\n");
+            }
+        }
+    }
+
+    // continue adding official root certificate to certificate store 
+    return CertAddEncodedCertificateToStore_orig(hCertStore, dwCertEncodingType, pbCertEncoded, cbCertEncoded, dwAddDisposition, ppCertContext);
+}
+#endif
+
+#if __LINUX__ || __MAC__
 static openssl_ctx crypto;
 
 int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
@@ -115,18 +87,19 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
             const char* certText = certStr.c_str();
             BIO* mem = crypto.BIO_new(crypto.BIO_s_mem());;
             crypto.BIO_puts(mem, certText);
+            // may be use X509 *PEM_read_X509(FILE *fp, X509 **x, pem_password_cb *cb, void *u); instead?
             X509* cert = crypto.PEM_read_bio_X509(mem, NULL, 0, NULL);
             crypto.BIO_free(mem);
 
             // inject our root certificate to certificate store
-            if (!crypto.X509_STORE_add_cert(ctx, cert))
-            {
-                msg(PLUGIN_PREFIX "failed to add our root certificate to certificate store!\n");
-            }
-            else
+            if (crypto.X509_STORE_add_cert(ctx, cert))
             {
                 if ((debug & IDA_DEBUG_LUMINA) != 0)
                     msg(PLUGIN_PREFIX "added our root certificate to certificate store\n");
+            }
+            else
+            {
+                msg(PLUGIN_PREFIX "failed to add our root certificate to certificate store!\n");
             }
 
             crypto.X509_free(cert);
@@ -187,21 +160,19 @@ struct file_enumerator_impl : file_enumerator_t
 
     int visit_file(const char* file)
     {
-#if __NT__
-        bytevec_t cert;
-        if (load_and_decode_certificate(cert, file))
-            pc->certificates.add(cert);
-        else
-            msg(PLUGIN_PREFIX "failed to load and decode certificate file!\n");
-#elif __LINUX__ || __MAC__
+        if ((debug & IDA_DEBUG_LUMINA) != 0)
+            msg(PLUGIN_PREFIX "loading certificate: %s\n", file);
+
         qstring cert;
+
         if (load_certificate(cert, file))
             pc->certificates.add(cert);
         else
             msg(PLUGIN_PREFIX "failed to load certificate file!\n");
-#endif
+
         if ((debug & IDA_DEBUG_LUMINA) != 0)
             msg(PLUGIN_PREFIX "loaded certificate: %s\n", file);
+
         return 0;
     }
 private:
