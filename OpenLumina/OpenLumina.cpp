@@ -125,7 +125,7 @@ void* dlopen_hook(const char* filename, int flags)
 
 void* dlsym_hook(void* handle, const char* symbol)
 {
-    qeprintf(PLUGIN_PREFIX "dlsym_hook enter: %p %s\n", handle, symbol);
+    //qeprintf("dlsym_hook enter: %p %s\n", handle, symbol);
 
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "dlsym_hook: %p %s\n", handle, symbol);
@@ -152,7 +152,7 @@ void* dlsym_hook(void* handle, const char* symbol)
         return (void*)X509_STORE_add_cert_hook;
     }
 
-    qeprintf(PLUGIN_PREFIX "dlsym_hook exit: %p %s\n", handle, symbol);
+    //qeprintf("dlsym_hook exit: %p %s\n", handle, symbol);
 
     return addr;
 }
