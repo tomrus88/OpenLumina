@@ -111,7 +111,7 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
 
 void* dlopen_hook(const char* filename, int flags)
 {
-    fprintf(stderr, PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
+    qeprintf(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "dlopen_hook: %s %u\n", filename, flags);
     return dlopen(filename, flags);
@@ -119,7 +119,7 @@ void* dlopen_hook(const char* filename, int flags)
 
 void* dlsym_hook(void* handle, const char* symbol)
 {
-    fprintf(stderr, PLUGIN_PREFIX "dlsym_hook enter: %p %s\n", handle, symbol);
+    qeprintf(PLUGIN_PREFIX "dlsym_hook enter: %p %s\n", handle, symbol);
 
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "dlsym_hook: %p %s\n", handle, symbol);
@@ -146,7 +146,7 @@ void* dlsym_hook(void* handle, const char* symbol)
         return (void*)X509_STORE_add_cert_hook;
     }
 
-    fprintf(stderr, PLUGIN_PREFIX "dlsym_hook exit: %p %s\n", handle, symbol);
+    qeprintf(PLUGIN_PREFIX "dlsym_hook exit: %p %s\n", handle, symbol);
 
     return addr;
 }
@@ -250,6 +250,7 @@ bool plugin_ctx_t::init_hook()
 
 #if __MAC__
 #if __EA64__
+    qeprintf("plthook start\n");
     if (plthook_open(&plthook, "libida64.dylib") != 0) {
         msg("plthook_open error: %s\n", plthook_error());
         return false;
@@ -270,8 +271,10 @@ bool plugin_ctx_t::init_hook()
         plthook_close(plthook);
         return false;
     }
+    qeprintf("plthook end\n");
 #endif
     plthook_close(plthook);
+    qeprintf("plthook closed\n");
 
     if ((debug & IDA_DEBUG_LUMINA) != 0)
         msg(PLUGIN_PREFIX "certificate hook applied\n");
