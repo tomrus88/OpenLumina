@@ -28,3 +28,21 @@ struct openssl_ctx
 };
 
 #endif
+
+#if __EA64__ && IDA_SDK_VERSION < 900
+#define IDA_LIB_SUFF "64"
+#else
+#define IDA_LIB_SUFF
+#endif
+
+#if __NT__
+constexpr auto IDA_LIB_NAME = "ida" IDA_LIB_SUFF ".dll";
+#endif
+
+#if __LINUX__
+constexpr auto IDA_LIB_NAME = "libida" IDA_LIB_SUFF ".so";
+#endif
+
+#if __MAC__
+constexpr auto IDA_LIB_NAME = "libida" IDA_LIB_SUFF ".dylib";
+#endif

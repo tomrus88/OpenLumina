@@ -3,7 +3,7 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros">
     <IDADIR>..\$(Platform)\$(Configuration)</IDADIR>
-    <IDASDK>e:\ida90\idasdk90</IDASDK>
+    <IDASDK>e:\ida90\idasdk90b3</IDASDK>
   </PropertyGroup>
   <PropertyGroup />
   <ItemDefinitionGroup />

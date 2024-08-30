@@ -158,6 +158,7 @@ bool idaapi plugin_ctx_t::run(size_t arg)
     return true;
 }
 
+#if IDA_SDK_VERSION >= 900
 struct file_enumerator_impl : file_enumerator_t
 {
     file_enumerator_impl(plugin_ctx_t* ctx) : pc(ctx) {}
@@ -182,15 +183,38 @@ struct file_enumerator_impl : file_enumerator_t
 private:
     plugin_ctx_t* pc = nullptr;
 };
+#else
+int enum_hexrays_certificates_cb(const char* file, void* ud)
+{
+    if ((debug & IDA_DEBUG_LUMINA) != 0)
+        msg(PLUGIN_PREFIX "loading certificate: %s\n", file);
+
+    qstring cert;
+
+    if (load_certificate(cert, file))
+        ((plugin_ctx_t*)ud)->certificates.add(cert);
+    else
+        msg(PLUGIN_PREFIX "failed to load certificate file!\n");
+
+    if ((debug & IDA_DEBUG_LUMINA) != 0)
+        msg(PLUGIN_PREFIX "loaded certificate: %s\n", file);
+
+    return 0;
+}
+#endif
 
 bool plugin_ctx_t::init_hook()
 {
     const char* ida_dir = idadir(nullptr);
 
     char answer[QMAXPATH];
-    file_enumerator_impl fe(this);
 
+#if IDA_SDK_VERSION >= 900
+    file_enumerator_impl fe(this);
     enumerate_files(answer, sizeof(answer), ida_dir, "hexrays*.crt", fe);
+#else
+    enumerate_files(answer, sizeof(answer), ida_dir, "hexrays*.crt", enum_hexrays_certificates_cb, this);
+#endif
 
     if (certificates.size() == 0)
     {
@@ -205,18 +229,12 @@ bool plugin_ctx_t::init_hook()
 
     plthook_t* plthook;
 
+    if (plthook_open(&plthook, IDA_LIB_NAME) != 0) {
+        msg("plthook_open error: %s\n", plthook_error());
+        return false;
+    }
+
 #if __NT__
-#if __EA64__
-    if (plthook_open(&plthook, "ida64.dll") != 0) {
-        msg("plthook_open error: %s\n", plthook_error());
-        return false;
-    }
-#else
-    if (plthook_open(&plthook, "ida.dll") != 0) {
-        msg("plthook_open error: %s\n", plthook_error());
-        return false;
-    }
-#endif
     if (plthook_replace(plthook, "CertAddEncodedCertificateToStore", (void*)CertAddEncodedCertificateToStore_hook, NULL) != 0) {
         msg("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
@@ -224,48 +242,13 @@ bool plugin_ctx_t::init_hook()
     }
 #endif
 
-#if __LINUX__
-#if __EA64__
-    if (plthook_open(&plthook, "libida64.so") != 0) {
-        msg("plthook_open error: %s\n", plthook_error());
-        return false;
-}
-#else
-    if (plthook_open(&plthook, "libida.so") != 0) {
-        msg("plthook_open error: %s\n", plthook_error());
-        return false;
-    }
-#endif
+#if __LINUX__ || __MAC__
     if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, NULL) != 0) {
         msg("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
     }
     if (plthook_replace(plthook, "dlsym", (void*)dlsym_hook, NULL) != 0) {
-        msg("plthook_replace error: %s\n", plthook_error());
-        plthook_close(plthook);
-        return false;
-    }
-#endif
-
-#if __MAC__
-#if __EA64__
-    if (plthook_open(&plthook, "libida64.dylib") != 0) {
-        msg("plthook_open error: %s\n", plthook_error());
-        return false;
-    }
-#else
-    if (plthook_open(&plthook, "libida.dylib") != 0) {
-        msg("plthook_open error: %s\n", plthook_error());
-        return false;
-    }
-#endif
-    if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, nullptr) != 0) {
-        msg("plthook_replace error: %s\n", plthook_error());
-        plthook_close(plthook);
-        return false;
-    }
-    if (plthook_replace(plthook, "dlsym", (void*)dlsym_hook, nullptr) != 0) {
         msg("plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
