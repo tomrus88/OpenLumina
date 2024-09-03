@@ -29,7 +29,7 @@ struct openssl_ctx
 
 #endif
 
-#if __EA64__ && IDA_SDK_VERSION < 900
+#if __EA64__// && IDA_SDK_VERSION < 900
 #define IDA_LIB_SUFF "64"
 #else
 #define IDA_LIB_SUFF
