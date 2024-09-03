@@ -6,7 +6,7 @@
  *
  * ------------------------------------------------------
  *
- * Copyright 2014-2019 Kubo Takehiro <kubo@jiubao.org>
+ * Copyright 2014-2024 Kubo Takehiro <kubo@jiubao.org>
  *
  * Redistribution and use in source and binary forms, with or without modification, are
  * permitted provided that the following conditions are met:
@@ -47,10 +47,10 @@
 #include <mach-o/fixup-chains.h>
 #include "plthook.h"
 
-#define PLTHOOK_DEBUG_CMD 1
-#define PLTHOOK_DEBUG_BIND 1
-#define PLTHOOK_DEBUG_FIXUPS 1
-#define PLTHOOK_DEBUG_ADDR 1
+// #define PLTHOOK_DEBUG_CMD 1
+// #define PLTHOOK_DEBUG_BIND 1
+// #define PLTHOOK_DEBUG_FIXUPS 1
+// #define PLTHOOK_DEBUG_ADDR 1
 
 #ifdef PLTHOOK_DEBUG_CMD
 #define DEBUG_CMD(...) fprintf(stderr, __VA_ARGS__)
@@ -66,8 +66,10 @@
 
 #ifdef PLTHOOK_DEBUG_BIND
 #define DEBUG_BIND(...) fprintf(stderr, __VA_ARGS__)
+#define DEBUG_BIND_IF(cond, ...) if (cond) fprintf(stderr, __VA_ARGS__)
 #else
 #define DEBUG_BIND(...)
+#define DEBUG_BIND_IF(cond, ...)
 #endif
 
 #ifdef PLTHOOK_DEBUG_ADDR
@@ -146,6 +148,8 @@ static void dump_maps(const char *image_name)
 
 typedef struct {
     const char *name;
+    int addend;
+    char weak;
     void **addr;
 } bind_address_t;
 
@@ -164,23 +168,39 @@ struct plthook {
 };
 
 #define MAX_SEGMENTS 8
+#define MAX_SECTIONS 30
 
 typedef struct {
     plthook_t *plthook;
     intptr_t slide;
     int num_segments;
     int linkedit_segment_idx;
-    struct segment_command_64 *segments[MAX_SEGMENTS];
-    struct linkedit_data_command *chained_fixups;
-    size_t got_addr;
+    const struct segment_command_64 *segments[MAX_SEGMENTS];
+#ifdef PLTHOOK_DEBUG_FIXUPS
+    int num_sections;
+    const struct section_64 *sections[MAX_SECTIONS];
+#endif
+    const struct linkedit_data_command *chained_fixups;
 } data_t;
 
 static int plthook_open_real(plthook_t **plthook_out, uint32_t image_idx, const struct mach_header *mh, const char *image_name);
-static unsigned int set_bind_addrs(data_t *d, uint32_t lazy_bind_off, uint32_t lazy_bind_size);
-static void set_bind_addr(data_t *d, unsigned int *idx, const char *sym_name, int seg_index, int seg_offset);
+static unsigned int set_bind_addrs(data_t *data, unsigned int idx, uint32_t bind_off, uint32_t bind_size, char weak);
+static void set_bind_addr(data_t *d, unsigned int *idx, const char *sym_name, int seg_index, int seg_offset, int addend, char weak);
 static int read_chained_fixups(data_t *d, const struct mach_header *mh, const char *image_name);
+#ifdef PLTHOOK_DEBUG_FIXUPS
+static const char *segment_name_from_addr(data_t *d, size_t addr);
+static const char *section_name_from_addr(data_t *d, size_t addr);
+#endif
+
 static int set_mem_prot(plthook_t *plthook);
 static int get_mem_prot(plthook_t *plthook, void *addr);
+
+static inline uint8_t *fileoff_to_vmaddr_in_segment(data_t *d, int segment_index, size_t offset)
+{
+    const struct segment_command_64 *seg = d->segments[segment_index];
+    return (uint8_t *)(seg->vmaddr - seg->fileoff + d->slide + offset);
+}
+static uint8_t *fileoff_to_vmaddr(data_t *data, size_t offset);
 
 static void set_errmsg(const char *fmt, ...) __attribute__((__format__ (__printf__, 1, 2)));
 
@@ -246,12 +266,9 @@ int plthook_open(plthook_t **plthook_out, const char *filename)
               offset = image_name_len - namelen;
             }
         }
-        fprintf(stderr, "pre strcmp\n");
         if (strcmp(image_name + offset, filename) == 0) {
-            fprintf(stderr, "pre plthook_open_real\n");
             return plthook_open_real(plthook_out, idx, NULL, image_name);
         }
-        fprintf(stderr, "post strcmp\n");
     }
     *plthook_out = NULL;
     set_errmsg("Cannot find file: %s", filename);
@@ -272,7 +289,7 @@ int plthook_open_by_handle(plthook_t **plthook_out, void *hndl)
         set_errmsg("NULL handle");
         return PLTHOOK_FILE_NOT_FOUND;
     }
-    for (flag_idx = 0; flag_idx < NUM_FLAGS; flag_idx++) {
+    for (flag_idx = 0; flag_idx < (int)NUM_FLAGS; flag_idx++) {
         uint32_t idx;
 
         for (idx = 0; idx < cnt; idx++) {
@@ -313,8 +330,7 @@ int plthook_open_by_address(plthook_t **plthook_out, void *address)
 static int plthook_open_real(plthook_t **plthook_out, uint32_t image_idx, const struct mach_header *mh, const char *image_name)
 {
     struct load_command *cmd;
-    uint32_t lazy_bind_off = 0;
-    uint32_t lazy_bind_size = 0;
+    const struct dyld_info_command *dyld_info = NULL;
     unsigned int nbind;
     data_t data = {NULL,};
     size_t size;
@@ -338,7 +354,6 @@ static int plthook_open_real(plthook_t **plthook_out, uint32_t image_idx, const 
     cmd = (struct load_command *)((size_t)mh + sizeof(struct mach_header_64));
     DEBUG_CMD("CMD START\n");
     for (i = 0; i < mh->ncmds; i++) {
-        struct dyld_info_command *dyld_info;
 #ifdef PLTHOOK_DEBUG_CMD
         struct segment_command *segment;
 #endif
@@ -377,53 +392,61 @@ static int plthook_open_real(plthook_t **plthook_out, uint32_t image_idx, const 
             if (strcmp(segment64->segname, "__LINKEDIT") == 0) {
                 data.linkedit_segment_idx = data.num_segments;
             }
-            if (strcmp(segment64->segname, "__DATA_CONST") == 0) {
-                struct section_64 *sec = (struct section_64 *)(segment64 + 1);
-                uint32_t i;
-                for (i = 0; i < segment64->nsects; i++) {
-                    DEBUG_CMD("  section_64 (%u)\n"
-                              "      sectname  %s\n"
-                              "      segname   %s\n"
-                              "      addr      0x%llx\n"
-                              "      size      0x%llx\n"
-                              "      offset    0x%x\n"
-                              "      align     0x%x\n"
-                              "      reloff    0x%x\n"
-                              "      nreloc    %d\n"
-                              "      flags     0x%x\n"
-                              "      reserved1 %d\n"
-                              "      reserved2 %d\n"
-                              "      reserved3 %d\n",
-                              i,
-                              sec->sectname,
-                              sec->segname,
-                              sec->addr,
-                              sec->size,
-                              sec->offset,
-                              sec->align,
-                              sec->reloff,
-                              sec->nreloc,
-                              sec->flags,
-                              sec->reserved1,
-                              sec->reserved2,
-                              sec->reserved3);
-                    if (strcmp(sec->segname, "__DATA_CONST") == 0 && strcmp(sec->sectname, "__got") == 0) {
-                        data.got_addr = sec->addr + data.slide;
-                        DEBUG_CMD("got_addr %p\n", data.got_addr);
-                    }
-                    sec++;
-                }
+#ifdef PLTHOOK_DEBUG_FIXUPS
+            struct section_64 *sec = (struct section_64 *)(segment64 + 1);
+            uint32_t i;
+            for (i = 0; i < segment64->nsects; i++) {
+                DEBUG_CMD("  section_64 (%u)\n"
+                          "      sectname  %s\n"
+                          "      segname   %s\n"
+                          "      addr      0x%llx\n"
+                          "      size      0x%llx\n"
+                          "      offset    0x%x\n"
+                          "      align     0x%x\n"
+                          "      reloff    0x%x\n"
+                          "      nreloc    %d\n"
+                          "      flags     0x%x\n"
+                          "      reserved1 %d\n"
+                          "      reserved2 %d\n"
+                          "      reserved3 %d\n",
+                          i,
+                          sec->sectname,
+                          sec->segname,
+                          sec->addr,
+                          sec->size,
+                          sec->offset,
+                          sec->align,
+                          sec->reloff,
+                          sec->nreloc,
+                          sec->flags,
+                          sec->reserved1,
+                          sec->reserved2,
+                          sec->reserved3);
+                sec++;
             }
+#endif
             if (data.num_segments == MAX_SEGMENTS) {
                 set_errmsg("Too many segments: %s", image_name);
                 return PLTHOOK_INTERNAL_ERROR;
             }
             data.segments[data.num_segments++] = segment64;
+#ifdef PLTHOOK_DEBUG_FIXUPS
+            {
+                struct section_64 *sec = (struct section_64 *)(segment64 + 1);
+                struct section_64 *sec_end = sec + segment64->nsects;
+                while (sec < sec_end) {
+                    if (data.num_sections == MAX_SECTIONS) {
+                        set_errmsg("Too many sections: %s", image_name);
+                        return PLTHOOK_INTERNAL_ERROR;
+                    }
+                    data.sections[data.num_sections++] = sec;
+                    sec++;
+                }
+            }
+#endif
             break;
         case LC_DYLD_INFO_ONLY: /* (0x22|LC_REQ_DYLD) */
             dyld_info= (struct dyld_info_command *)cmd;
-            lazy_bind_off = dyld_info->lazy_bind_off;
-            lazy_bind_size = dyld_info->lazy_bind_size;
             DEBUG_CMD("LC_DYLD_INFO_ONLY\n"
                       "                 offset     size\n"
                       "  rebase       %8x %8x\n"
@@ -458,7 +481,7 @@ static int plthook_open_real(plthook_t **plthook_out, uint32_t image_idx, const 
         case LC_UUID: /* 0x1b */
             DEBUG_CMD("LC_UUID\n");
             break;
-        case LC_RPATH: /* 0x1c|LC_REQ_DYLD */
+        case LC_RPATH: /* (0x1c|LC_REQ_DYLD) */
             DEBUG_CMD("LC_RPATH\n");
             break;
         case LC_CODE_SIGNATURE: /* 0x1d */
@@ -510,14 +533,15 @@ static int plthook_open_real(plthook_t **plthook_out, uint32_t image_idx, const 
         return PLTHOOK_INVALID_FILE_FORMAT;
     }
     if (data.chained_fixups != NULL) {
-        fprintf(stderr, "pre read_chained_fixups\n");
         int rv = read_chained_fixups(&data, mh, image_name);
-        fprintf(stderr, "post read_chained_fixups\n");
         if (rv != 0) {
             return rv;
         }
     } else {
-        nbind = set_bind_addrs(&data, lazy_bind_off, lazy_bind_size);
+        nbind = 0;
+        nbind = set_bind_addrs(&data, nbind, dyld_info->bind_off, dyld_info->bind_size, 0);
+        nbind = set_bind_addrs(&data, nbind, dyld_info->weak_bind_off, dyld_info->weak_bind_size, 1);
+        nbind = set_bind_addrs(&data, nbind, dyld_info->lazy_bind_off, dyld_info->lazy_bind_size, 0);
         size = offsetof(plthook_t, entries) + sizeof(bind_address_t) * nbind;
         data.plthook = (plthook_t*)calloc(1, size);
         if (data.plthook == NULL) {
@@ -525,152 +549,280 @@ static int plthook_open_real(plthook_t **plthook_out, uint32_t image_idx, const 
             return PLTHOOK_OUT_OF_MEMORY;
         }
         data.plthook->num_entries = nbind;
-        set_bind_addrs(&data, lazy_bind_off, lazy_bind_size);
+        nbind = 0;
+        nbind = set_bind_addrs(&data, nbind, dyld_info->bind_off, dyld_info->bind_size, 0);
+        nbind = set_bind_addrs(&data, nbind, dyld_info->weak_bind_off, dyld_info->weak_bind_size, 1);
+        nbind = set_bind_addrs(&data, nbind, dyld_info->lazy_bind_off, dyld_info->lazy_bind_size, 0);
     }
-    fprintf(stderr, "pre set_mem_prot\n");
     set_mem_prot(data.plthook);
-    fprintf(stderr, "post set_mem_prot\n");
 
     *plthook_out = data.plthook;
     return 0;
 }
 
-static unsigned int set_bind_addrs(data_t *data, uint32_t lazy_bind_off, uint32_t lazy_bind_size)
+static unsigned int set_bind_addrs(data_t *data, unsigned int idx, uint32_t bind_off, uint32_t bind_size, char weak)
 {
-    struct segment_command_64 *linkedit = data->segments[data->linkedit_segment_idx];
-    const uint8_t *ptr = (uint8_t*)(linkedit->vmaddr - linkedit->fileoff + data->slide + lazy_bind_off);
-    const uint8_t *end = ptr + lazy_bind_size;
+    const uint8_t *ptr = fileoff_to_vmaddr_in_segment(data, data->linkedit_segment_idx, bind_off);
+    const uint8_t *end = ptr + bind_size;
     const char *sym_name;
     int seg_index = 0;
     uint64_t seg_offset = 0;
+    int addend = 0;
     int count, skip;
-    unsigned int idx = 0;
+#ifdef PLTHOOK_DEBUG_BIND
+    int cond = data->plthook != NULL;
+#endif
 
     while (ptr < end) {
         uint8_t op = *ptr & BIND_OPCODE_MASK;
         uint8_t imm = *ptr & BIND_IMMEDIATE_MASK;
         int i;
 
-        DEBUG_BIND("0x%02x: ", *ptr);
+        DEBUG_BIND_IF(cond, "0x%02x: ", *ptr);
         ptr++;
         switch (op) {
         case BIND_OPCODE_DONE:
-            DEBUG_BIND("BIND_OPCODE_DONE\n");
+            DEBUG_BIND_IF(cond, "BIND_OPCODE_DONE\n");
             break;
         case BIND_OPCODE_SET_DYLIB_ORDINAL_IMM:
-            DEBUG_BIND("BIND_OPCODE_SET_DYLIB_ORDINAL_IMM: ordinal = %u\n", imm);
+            DEBUG_BIND_IF(cond, "BIND_OPCODE_SET_DYLIB_ORDINAL_IMM: ordinal = %u\n", imm);
             break;
         case BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB:
 #ifdef PLTHOOK_DEBUG_BIND
-            DEBUG_BIND("BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB: ordinal = %llu\n", uleb128(&ptr));
+            DEBUG_BIND_IF(cond, "BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB: ordinal = %llu\n", uleb128(&ptr));
 #else
             uleb128(&ptr);
 #endif
             break;
         case BIND_OPCODE_SET_DYLIB_SPECIAL_IMM:
             if (imm == 0) {
-                DEBUG_BIND("BIND_OPCODE_SET_DYLIB_SPECIAL_IMM: ordinal = 0\n");
+                DEBUG_BIND_IF(cond, "BIND_OPCODE_SET_DYLIB_SPECIAL_IMM: ordinal = 0\n");
             } else {
-                DEBUG_BIND("BIND_OPCODE_SET_DYLIB_SPECIAL_IMM: ordinal = %u\n", BIND_OPCODE_MASK | imm);
+                DEBUG_BIND_IF(cond, "BIND_OPCODE_SET_DYLIB_SPECIAL_IMM: ordinal = %u\n", BIND_OPCODE_MASK | imm);
             }
+            break;
         case BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM:
             sym_name = (const char*)ptr;
             ptr += strlen(sym_name) + 1;
-            DEBUG_BIND("BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM: sym_name = %s\n", sym_name);
+            DEBUG_BIND_IF(cond, "BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM: sym_name = %s\n", sym_name);
             break;
         case BIND_OPCODE_SET_TYPE_IMM:
-            DEBUG_BIND("BIND_OPCODE_SET_TYPE_IMM: type = %u\n", imm);
+            DEBUG_BIND_IF(cond, "BIND_OPCODE_SET_TYPE_IMM: type = %u\n", imm);
             break;
         case BIND_OPCODE_SET_ADDEND_SLEB:
-#ifdef PLTHOOK_DEBUG_BIND
-            DEBUG_BIND("BIND_OPCODE_SET_ADDEND_SLEB: ordinal = %lld\n", sleb128(&ptr));
-#else
-            sleb128(&ptr);
-#endif
+            addend = sleb128(&ptr);
+            DEBUG_BIND_IF(cond, "BIND_OPCODE_SET_ADDEND_SLEB: ordinal = %lld\n", addend);
             break;
         case BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB:
             seg_index = imm;
             seg_offset = uleb128(&ptr);
-            DEBUG_BIND("BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB: seg_index = %u, seg_offset = 0x%llx\n", seg_index, seg_offset);
+            DEBUG_BIND_IF(cond, "BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB: seg_index = %u, seg_offset = 0x%llx\n", seg_index, seg_offset);
             break;
         case BIND_OPCODE_ADD_ADDR_ULEB:
             seg_offset += uleb128(&ptr);
-            DEBUG_BIND("BIND_OPCODE_ADD_ADDR_ULEB: seg_offset = 0x%llx\n", seg_offset);
+            DEBUG_BIND_IF(cond, "BIND_OPCODE_ADD_ADDR_ULEB: seg_offset = 0x%llx\n", seg_offset);
             break;
         case BIND_OPCODE_DO_BIND:
-            set_bind_addr(data, &idx, sym_name, seg_index, seg_offset);
-            DEBUG_BIND("BIND_OPCODE_DO_BIND\n");
+            set_bind_addr(data, &idx, sym_name, seg_index, seg_offset, addend, weak);
+            seg_offset += sizeof(void*);
+            DEBUG_BIND_IF(cond, "BIND_OPCODE_DO_BIND\n");
             break;
         case BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB:
-            seg_offset += uleb128(&ptr);
-            DEBUG_BIND("BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB: seg_offset = 0x%llx\n", seg_offset);
+            set_bind_addr(data, &idx, sym_name, seg_index, seg_offset, addend, weak);
+            seg_offset += uleb128(&ptr) + sizeof(void*);
+            DEBUG_BIND_IF(cond, "BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB: seg_offset = 0x%llx\n", seg_offset);
             break;
         case BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED:
-            set_bind_addr(data, &idx, sym_name, seg_index, seg_offset);
-            seg_offset += imm * sizeof(void *);
-            DEBUG_BIND("BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED\n");
+            set_bind_addr(data, &idx, sym_name, seg_index, seg_offset, addend, weak);
+            seg_offset += imm * sizeof(void *) + sizeof(void*);
+            DEBUG_BIND_IF(cond, "BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED\n");
             break;
         case BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB:
             count = uleb128(&ptr);
             skip = uleb128(&ptr);
             for (i = 0; i < count; i++) {
-                set_bind_addr(data, &idx, sym_name, seg_index, seg_offset);
-                seg_offset += skip;
+                set_bind_addr(data, &idx, sym_name, seg_index, seg_offset, addend, weak);
+                seg_offset += skip + sizeof(void*);
             }
-            DEBUG_BIND("BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB\n");
+            DEBUG_BIND_IF(cond, "BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB\n");
             break;
+        default:
+            DEBUG_BIND_IF(cond, "op: 0x%x, imm: 0x%x\n", op, imm);
         }
     }
     return idx;
 }
 
-static void set_bind_addr(data_t *data, unsigned int *idx, const char *sym_name, int seg_index, int seg_offset)
+static void set_bind_addr(data_t *data, unsigned int *idx, const char *sym_name, int seg_index, int seg_offset, int addend, char weak)
 {
     if (data->plthook != NULL) {
         size_t vmaddr = data->segments[seg_index]->vmaddr;
-        data->plthook->entries[*idx].name = sym_name;
-        data->plthook->entries[*idx].addr = (void**)(vmaddr + data->slide + seg_offset);
+        bind_address_t *bind_addr = &data->plthook->entries[*idx];
+        bind_addr->name = sym_name;
+        bind_addr->addend = addend;
+        bind_addr->weak = weak;
+        bind_addr->addr = (void**)(vmaddr + data->slide + seg_offset);
+        DEBUG_BIND("bind_address[%u]: %s, %d, %d, %p, %p, %p\n", *idx, sym_name, seg_index, seg_offset, (void*)vmaddr, (void*)data->slide, bind_addr->addr);
     }
     (*idx)++;
 }
 
+typedef struct {
+    const char *image_name;
+    FILE *fp;
+    const struct dyld_chained_starts_in_image *starts;
+    uint32_t seg_index; // i
+    uint16_t page_index; // j
+    off_t offset;
+} chained_fixups_iter_t;
+
+typedef struct {
+    uint16_t    ptr_format;
+    union {
+        uint64_t raw;
+        struct dyld_chained_ptr_64_rebase rebase;
+        struct dyld_chained_ptr_64_bind bind;
+        struct dyld_chained_ptr_arm64e_rebase arm64e_rebase;
+        struct dyld_chained_ptr_arm64e_bind arm64e_bind;
+        struct dyld_chained_ptr_arm64e_bind24 arm64e_bind24;
+        struct dyld_chained_ptr_arm64e_auth_rebase arm64e_auth_rebase;
+        struct dyld_chained_ptr_arm64e_auth_bind arm64e_auth_bind;
+        struct dyld_chained_ptr_arm64e_auth_bind24 arm64e_auth_bind24;
+    } ptr;
+    off_t offset;
+} chianed_fixups_entry_t;
+
+static int chained_fixups_iter_init(chained_fixups_iter_t *iter, const char *image_name, const struct dyld_chained_starts_in_image *starts_offset);
+static void chained_fixups_iter_deinit(chained_fixups_iter_t *iter);
+static int chained_fixups_iter_rewind(chained_fixups_iter_t *iter);
+static int chained_fixups_iter_next(chained_fixups_iter_t *iter, chianed_fixups_entry_t *entry);
+
+static int chained_fixups_iter_init(chained_fixups_iter_t *iter, const char *image_name, const struct dyld_chained_starts_in_image *starts)
+{
+    memset(iter, 0, sizeof(*iter));
+    iter->fp = fopen(image_name, "r");
+    if (iter->fp == NULL) {
+        set_errmsg("failed to open file %s (error: %s)", image_name, strerror(errno));
+        return PLTHOOK_FILE_NOT_FOUND;
+    }
+    iter->image_name = image_name;
+    iter->starts = starts;
+    return 0;
+}
+
+static void chained_fixups_iter_deinit(chained_fixups_iter_t *iter)
+{
+    if (iter->fp != NULL) {
+        fclose(iter->fp);
+        iter->fp = NULL;
+    }
+}
+
+static int chained_fixups_iter_rewind(chained_fixups_iter_t *iter)
+{
+    iter->seg_index = 0;
+    iter->page_index = 0;
+    iter->offset = 0;
+    return 0;
+}
+
+static int chained_fixups_iter_next(chained_fixups_iter_t *iter, chianed_fixups_entry_t *entry)
+{
+    const struct dyld_chained_starts_in_image *starts = iter->starts;
+    uint32_t i = iter->seg_index;
+    uint16_t j = iter->page_index;
+    off_t offset = iter->offset;
+
+next_segment:
+    if (i == starts->seg_count) {
+        return -1;
+    }
+    if (j == 0 && offset == 0) {
+        DEBUG_FIXUPS("  seg_info_offset[%u] %u\n",
+                     i, starts->seg_info_offset[i]);
+    }
+    if (starts->seg_info_offset[i] == 0) {
+        i++;
+        j = 0;
+        offset = 0;
+        goto next_segment;
+    }
+    const struct dyld_chained_starts_in_segment* seg = (const struct dyld_chained_starts_in_segment*)((char*)starts + starts->seg_info_offset[i]);
+    if (j == 0 && offset == 0) {
+        DEBUG_FIXUPS("    dyld_chained_starts_in_segment\n"
+                     "      size              %u\n"
+                     "      page_size         0x%x\n"
+                     "      pointer_format    %u\n"
+                     "      segment_offset    %llu (0x%llx)\n"
+                     "      max_valid_pointer %u\n"
+                     "      page_count        %u\n",
+                     seg->size, seg->page_size, seg->pointer_format, seg->segment_offset, seg->segment_offset, seg->max_valid_pointer, seg->page_count);
+    }
+next_page:
+    if (j == seg->page_count) {
+        i++;
+        j = 0;
+        offset = 0;
+        goto next_segment;
+    }
+
+    if (seg->page_start[j] == DYLD_CHAINED_PTR_START_NONE) {
+        DEBUG_FIXUPS("      page_start[%u]     DYLD_CHAINED_PTR_START_NONE\n", j);
+        j++;
+        offset = 0;
+        goto next_page;
+    }
+    if (offset == 0) {
+        DEBUG_FIXUPS("      page_start[%u]     %u\n", j, seg->page_start[j]);
+    }
+    if (offset == 0) {
+        offset = seg->segment_offset + j * seg->page_size + seg->page_start[j];
+    }
+    if (fseeko(iter->fp, offset, SEEK_SET) != 0) {
+        set_errmsg("failed to seek to %lld in %s", offset, iter->image_name);
+        return PLTHOOK_INVALID_FILE_FORMAT;
+    }
+    entry->ptr_format = seg->pointer_format;
+    if (fread(&entry->ptr, sizeof(entry->ptr), 1, iter->fp) != 1) {
+        set_errmsg("failed to read fixup chain from %s", iter->image_name);
+        return PLTHOOK_INVALID_FILE_FORMAT;
+    }
+    entry->offset = offset;
+    switch (seg->pointer_format) {
+    case DYLD_CHAINED_PTR_64_OFFSET:
+        if (entry->ptr.bind.next) {
+            offset += entry->ptr.bind.next * 4;
+        } else {
+            j++;
+            offset = 0;
+        }
+        break;
+    default:
+        set_errmsg("unsupported pointer format %u in %s", seg->pointer_format, iter->image_name);
+        return PLTHOOK_INTERNAL_ERROR;
+    }
+    iter->seg_index = i;
+    iter->page_index = j;
+    iter->offset = offset;
+    return 0;
+}
+
 static int read_chained_fixups(data_t *d, const struct mach_header *mh, const char *image_name)
 {
-    struct segment_command_64* linkedit = d->segments[d->linkedit_segment_idx];
-    const uint8_t* ptr = (uint8_t*)(linkedit->vmaddr - linkedit->fileoff + d->slide + d->chained_fixups->dataoff);
-    //const uint8_t *ptr = (const uint8_t *)mh + d->chained_fixups->dataoff;
-    const uint8_t *end = ptr + d->chained_fixups->datasize;
+    const uint8_t *ptr = fileoff_to_vmaddr_in_segment(d, d->linkedit_segment_idx, d->chained_fixups->dataoff);
     const struct dyld_chained_fixups_header *header = (const struct dyld_chained_fixups_header *)ptr;
-    DEBUG_FIXUPS("read_chained_fixups\n"
-        "d %p\n"
-        "got_addr %p\n"
-        "mh %p\n"
-        "dataoff %u %X\n"
-        "datasize %u %X\n"
-        "image_name %s\n"
-        "ptr %p\n"
-        "end %p\n"
-        "header %p\n",
-        d, d->got_addr, mh,
-        d->chained_fixups->dataoff, d->chained_fixups->dataoff,
-        d->chained_fixups->datasize, d->chained_fixups->datasize,
-        image_name, ptr, end, header);
-    const struct dyld_chained_import *import = (const struct dyld_chained_import *)(ptr + header->imports_offset);
-    const struct dyld_chained_import_addend *import_addend = (const struct dyld_chained_import_addend *)(ptr + header->imports_offset);
-    const struct dyld_chained_import_addend64 *import_addend64 = (const struct dyld_chained_import_addend64 *)(ptr + header->imports_offset);
     const char *symbol_pool = (const char*)ptr + header->symbols_offset;
-    DEBUG_FIXUPS("symbol_pool %p\n", symbol_pool);
-    int rv = PLTHOOK_INTERNAL_ERROR;
+    int rv;
+    unsigned int num_binds;
     size_t size;
-    uint32_t i;
-#ifdef PLTHOOK_DEBUG_FIXUPS
     const struct dyld_chained_starts_in_image *starts = (const struct dyld_chained_starts_in_image *)(ptr + header->starts_offset);
-    FILE *fp = NULL;
-#endif
-    if (d->got_addr == 0) {
-        set_errmsg("__got section is not found in %s", image_name);
-        rv = PLTHOOK_INVALID_FILE_FORMAT;
-        goto cleanup;
+    const struct dyld_chained_import *import = (const struct dyld_chained_import *)(ptr + header->imports_offset);
+    chained_fixups_iter_t iter = {NULL, };
+    chianed_fixups_entry_t entry;
+
+    rv = chained_fixups_iter_init(&iter, image_name, starts);
+    if (rv != 0) {
+        return rv;
     }
 
     DEBUG_FIXUPS("dyld_chained_fixups_header\n"
@@ -694,320 +846,140 @@ static int read_chained_fixups(data_t *d, const struct mach_header *mh, const ch
         goto cleanup;
     }
 
-    size = offsetof(plthook_t, entries) + sizeof(bind_address_t) * header->imports_count;
+    DEBUG_FIXUPS("dyld_chained_starts_in_image\n"
+                 "  seg_count       %u\n",
+                 starts->seg_count);
+    num_binds = 0;
+    while ((rv = chained_fixups_iter_next(&iter, &entry)) == 0) {
+        if (entry.ptr_format == DYLD_CHAINED_PTR_64_OFFSET && entry.ptr.bind.bind) {
+            num_binds++;
+        }
+#if 0
+        if (entry.ptr.rebase.bind) {
+            DEBUG_FIXUPS("  0x%08lX:  raw: 0x%016lX         bind: (next: %03u, ordinal: %06X, addend: %d)\n",
+                         entry.offset, entry.ptr.raw, entry.ptr.bind.next, entry.ptr.bind.ordinal, entry.ptr.bind.addend);
+        } else {
+            DEBUG_FIXUPS("  0x%08lX:  raw: 0x%016lX       rebase: (next: %03u, target: 0x%011lX, high8: 0x%02X)\n",
+                         entry.offset, entry.ptr.raw, entry.ptr.rebase.next, entry.ptr.rebase.target, entry.ptr.rebase.high8);
+        }
+#endif
+    }
+    if (rv > 0) {
+        goto cleanup;
+    }
+
+    size = offsetof(plthook_t, entries) + sizeof(bind_address_t) * num_binds;
     d->plthook = (plthook_t*)calloc(1, size);
     if (d->plthook == NULL) {
         set_errmsg("failed to allocate memory: %" PRIuPTR " bytes", size);
         rv = PLTHOOK_OUT_OF_MEMORY;
         goto cleanup;
     }
-    d->plthook->num_entries = header->imports_count;
+    d->plthook->num_entries = num_binds;
 
-    switch (header->imports_format) {
-    case DYLD_CHAINED_IMPORT:
-        DEBUG_FIXUPS("dyld_chained_import\n");
-        break;
-    case DYLD_CHAINED_IMPORT_ADDEND:
-        DEBUG_FIXUPS("dyld_chained_import_addend\n");
-        break;
-    case DYLD_CHAINED_IMPORT_ADDEND64:
-        DEBUG_FIXUPS("dyld_chained_import_addend64\n");
-        break;
-    default:
-        set_errmsg("unknown imports format %u", header->imports_format);
-        rv = PLTHOOK_INVALID_FILE_FORMAT;
-        goto cleanup;
-    }
-
-    void* handle = dlopen(image_name, RTLD_NOW);
-
-    DEBUG_FIXUPS("handle of %s is %p\n", image_name, handle);
-
-    for (i = 0; i < header->imports_count; i++) {
-        struct dyld_chained_import_addend64 imp;
-        switch (header->imports_format) {
-        case DYLD_CHAINED_IMPORT:
-            imp.lib_ordinal = import[i].lib_ordinal;
-            imp.weak_import = import[i].weak_import;
-            imp.name_offset = import[i].name_offset;
-            imp.addend = 0;
-            break;
-        case DYLD_CHAINED_IMPORT_ADDEND:
-            imp.lib_ordinal = import_addend[i].lib_ordinal;
-            imp.weak_import = import_addend[i].weak_import;
-            imp.name_offset = import_addend[i].name_offset;
-            imp.addend = import_addend[i].addend;
-            break;
-        case DYLD_CHAINED_IMPORT_ADDEND64:
-            imp = import_addend64[i];
-            break;
-        }
-        const char *name = symbol_pool + imp.name_offset;
-        if (name > (const char*)end) {
-            DEBUG_FIXUPS("[%u]  lib_ordinal %u, weak_import %u, name_offset %u, addend %llu\n",
-                i, imp.lib_ordinal, imp.weak_import, imp.name_offset, imp.addend);
-            set_errmsg("invalid symbol name address");
-            rv = PLTHOOK_INVALID_FILE_FORMAT;
-            goto cleanup;
-        }
-        void **addr = (void**)(d->got_addr + i * sizeof(void*));
-        intptr_t addr_rva = (intptr_t)addr - d->slide;
-        void* addr_sym = dlsym(handle, name);
-        DEBUG_FIXUPS("[%u]  lib_ordinal %u, weak_import %u, name_offset %u name_addr %p (%s), addr %p %p %p, addend %llu\n",
-            i, imp.lib_ordinal, imp.weak_import, imp.name_offset, name, name, addr, addr_rva, addr_sym, imp.addend);
-        d->plthook->entries[i].name = name;
-        d->plthook->entries[i].addr = addr;
-    }
-
+    chained_fixups_iter_rewind(&iter);
+    num_binds = 0;
+    while ((rv = chained_fixups_iter_next(&iter, &entry)) == 0) {
+        if (entry.ptr_format == DYLD_CHAINED_PTR_64_OFFSET && entry.ptr.bind.bind) {
+            uint16_t ordinal = entry.ptr.bind.ordinal;
+            uint32_t name_offset;
+            char weak = 0;
+            bind_address_t *bind_addr = &d->plthook->entries[num_binds];
 #ifdef PLTHOOK_DEBUG_FIXUPS
-    fp = fopen(image_name, "r");
-    if (fp == NULL) {
-        set_errmsg("failed to open file %s (error: %s)", image_name, strerror(errno));
-        rv = PLTHOOK_FILE_NOT_FOUND;
-        goto cleanup;
-    }
-
-    DEBUG_FIXUPS("dyld_chained_starts_in_image\n"
-                 "  seg_count       %u\n",
-                 starts->seg_count);
-    for (i = 0; i < starts->seg_count; i++) {
-        DEBUG_FIXUPS("  seg_info_offset[%u] %u\n",
-                     i, starts->seg_info_offset[i]);
-        if (starts->seg_info_offset[i] == 0) {
-            continue;
-        }
-        const struct dyld_chained_starts_in_segment* seg = (const struct dyld_chained_starts_in_segment*)((char*)starts + starts->seg_info_offset[i]);
-        uint16_t j;
-        DEBUG_FIXUPS("    dyld_chained_starts_in_segment\n"
-                     "      size              %u\n"
-                     "      page_size         0x%x\n"
-                     "      pointer_format    %u\n"
-                     "      segment_offset    %llu (0x%llx)\n"
-                     "      max_valid_pointer %u\n"
-                     "      page_count        %u\n",
-                     seg->size, seg->page_size, seg->pointer_format, seg->segment_offset, seg->segment_offset, seg->max_valid_pointer, seg->page_count);
-        for (j = 0; j < seg->page_count; j++) {
-            uint16_t index = j;
-            uint16_t break_loop = 1;
-            off_t offset;
-
-            if (seg->page_start[j] == DYLD_CHAINED_PTR_START_NONE) {
-                DEBUG_FIXUPS("      page_start[%u]     DYLD_CHAINED_PTR_START_NONE\n", j);
-                continue;
-            }
-            if (seg->page_start[j] & DYLD_CHAINED_PTR_START_MULTI) {
-                index = seg->page_start[j] & ~DYLD_CHAINED_PTR_START_MULTI;
-                DEBUG_FIXUPS("      page_start[%u]     (DYLD_CHAINED_PTR_START_MULTI | %u)\n", j, index);
-                break_loop = 0;
-            }
-            while (1) {
-                if (index != j) {
-                    DEBUG_FIXUPS("      page_start[%u]     %u\n", index, seg->page_start[index]);
-                }
-                offset = seg->segment_offset + j * seg->page_size + (seg->page_start[index] & ~DYLD_CHAINED_PTR_START_MULTI);
-                switch (seg->pointer_format) {
-                case DYLD_CHAINED_PTR_64_OFFSET: {
-                    union {
-                        struct dyld_chained_ptr_64_rebase rebase;
-                        struct dyld_chained_ptr_64_bind bind;
-                    } buf;
-
-                    do {
-                        if (fseeko(fp, offset, SEEK_SET) != 0) {
-                            set_errmsg("failed to seek to %lld in %s", offset, image_name);
-                            rv = PLTHOOK_INVALID_FILE_FORMAT;
-                            goto cleanup;
-                        }
-                        if (fread(&buf, sizeof(buf), 1, fp) != 1) {
-                            set_errmsg("failed to read fixup chain from %s", image_name);
-                            rv = PLTHOOK_INVALID_FILE_FORMAT;
-                            goto cleanup;
-                        }
-                        if (buf.rebase.bind) {
-                            DEBUG_FIXUPS("        dyld_chained_ptr_64_bind\n"
-                                         "          ordinal  %d\n"
-                                         "          addend   %d\n"
-                                         "          reserved %d\n"
-                                         "          next     %d\n"
-                                         "          bind     %d\n",
-                                         buf.bind.ordinal,
-                                         buf.bind.addend,
-                                         buf.bind.reserved,
-                                         buf.bind.next,
-                                         buf.bind.bind);
-                        } else {
-                            DEBUG_FIXUPS("        dyld_chained_ptr_64_rebase\n"
-                                         "          target   %llu\n"
-                                         "          high8    %d\n"
-                                         "          reserved %d\n"
-                                         "          next     %d\n"
-                                         "          bind     %d\n",
-                                         buf.rebase.target,
-                                         buf.rebase.high8,
-                                         buf.rebase.reserved,
-                                         buf.rebase.next,
-                                         buf.rebase.bind);
-                        }
-                        offset += buf.bind.next * 4;
-                    } while (buf.bind.next != 0);
-                    break;
-                }
-                case DYLD_CHAINED_PTR_ARM64E:
-                case DYLD_CHAINED_PTR_ARM64E_KERNEL:
-                case DYLD_CHAINED_PTR_ARM64E_USERLAND:
-                case DYLD_CHAINED_PTR_ARM64E_USERLAND24: {
-                    // The following code isn't tested.
-                    union {
-                        struct dyld_chained_ptr_arm64e_rebase rebase;
-                        struct dyld_chained_ptr_arm64e_bind bind;
-                        struct dyld_chained_ptr_arm64e_bind24 bind24;
-                        struct dyld_chained_ptr_arm64e_auth_rebase auth_rebase;
-                        struct dyld_chained_ptr_arm64e_auth_bind auth_bind;
-                        struct dyld_chained_ptr_arm64e_auth_bind24 auth_bind24;
-                    } buf;
-
-                    do {
-                        if (fseeko(fp, offset, SEEK_SET) != 0) {
-                            set_errmsg("failed to seek to %lld in %s", offset, image_name);
-                            rv = PLTHOOK_INVALID_FILE_FORMAT;
-                            goto cleanup;
-                        }
-                        if (fread(&buf, sizeof(buf), 1, fp) != 1) {
-                            set_errmsg("failed to read fixup chain from %s", image_name);
-                            rv = PLTHOOK_INVALID_FILE_FORMAT;
-                            goto cleanup;
-                        }
-                        if (!buf.rebase.auth) {
-                            if (!buf.rebase.bind) {
-                                DEBUG_FIXUPS("        dyld_chained_ptr_arm64e_rebase\n"
-                                             "          target    %llu\n"
-                                             "          high8     %d\n"
-                                             "          next      %d\n"
-                                             "          bind      %d\n"  // == 0
-                                             "          auth      %d\n", // == 0
-                                             buf.rebase.target,
-                                             buf.rebase.high8,
-                                             buf.rebase.next,
-                                             buf.rebase.bind,
-                                             buf.rebase.auth);
-                            } else if (seg->pointer_format != DYLD_CHAINED_PTR_ARM64E_USERLAND24) {
-                                DEBUG_FIXUPS("        dyld_chained_ptr_arm64e_bind\n"
-                                             "          ordinal   %d\n"
-                                             "          zero      %d\n"
-                                             "          addend    %d\n"
-                                             "          next      %d\n"
-                                             "          bind      %d\n"  // == 1
-                                             "          auth      %d\n", // == 0
-                                             buf.bind.ordinal,
-                                             buf.bind.zero,
-                                             buf.bind.addend,
-                                             buf.bind.next,
-                                             buf.bind.bind,
-                                             buf.bind.auth);
-                            } else {
-                                DEBUG_FIXUPS("        dyld_chained_ptr_arm64e_bind24\n"
-                                             "          ordinal   %d\n"
-                                             "          zero      %d\n"
-                                             "          addend    %d\n"
-                                             "          next      %d\n"
-                                             "          bind      %d\n"  // == 1
-                                             "          auth      %d\n", // == 0
-                                             buf.bind24.ordinal,
-                                             buf.bind24.zero,
-                                             buf.bind24.addend,
-                                             buf.bind24.next,
-                                             buf.bind24.bind,
-                                             buf.bind24.auth);
-                            }
-                        } else {
-                            if (!buf.rebase.bind) {
-                                DEBUG_FIXUPS("        dyld_chained_ptr_arm64e_auth_rebase\n"
-                                             "          target    %u\n"
-                                             "          diversity %d\n"
-                                             "          addrDiv   %d\n"
-                                             "          key       %d\n"
-                                             "          next      %d\n"
-                                             "          bind      %d\n"  // == 0
-                                             "          auth      %d\n", // == 1
-                                             buf.auth_rebase.target,
-                                             buf.auth_rebase.diversity,
-                                             buf.auth_rebase.addrDiv,
-                                             buf.auth_rebase.key,
-                                             buf.auth_rebase.next,
-                                             buf.auth_rebase.bind,
-                                             buf.auth_rebase.auth);
-                            } else if (seg->pointer_format != DYLD_CHAINED_PTR_ARM64E_USERLAND24) {
-                                DEBUG_FIXUPS("        dyld_chained_ptr_arm64e_auth_bind\n"
-                                             "          ordinal   %d\n"
-                                             "          zero      %d\n"
-                                             "          diversity %d\n"
-                                             "          addrDiv   %d\n"
-                                             "          key       %d\n"
-                                             "          next      %d\n"
-                                             "          bind      %d\n"  // == 1
-                                             "          auth      %d\n", // == 1
-                                             buf.auth_bind.ordinal,
-                                             buf.auth_bind.zero,
-                                             buf.auth_bind.diversity,
-                                             buf.auth_bind.addrDiv,
-                                             buf.auth_bind.key,
-                                             buf.auth_bind.next,
-                                             buf.auth_bind.bind,
-                                             buf.auth_bind.auth);
-                            } else {
-                                DEBUG_FIXUPS("        dyld_chained_ptr_arm64e_auth_bind24\n"
-                                             "          ordinal   %d\n"
-                                             "          zero      %d\n"
-                                             "          diversity %d\n"
-                                             "          addrDiv   %d\n"
-                                             "          key       %d\n"
-                                             "          next      %d\n"
-                                             "          bind      %d\n"  // == 1
-                                             "          auth      %d\n", // == 1
-                                             buf.auth_bind24.ordinal,
-                                             buf.auth_bind24.zero,
-                                             buf.auth_bind24.diversity,
-                                             buf.auth_bind24.addrDiv,
-                                             buf.auth_bind24.key,
-                                             buf.auth_bind24.next,
-                                             buf.auth_bind24.bind,
-                                             buf.auth_bind24.auth);
-                            }
-                        }
-                        if (seg->pointer_format == DYLD_CHAINED_PTR_ARM64E_KERNEL) {
-                            offset += buf.rebase.next * 4;
-                        } else {
-                            offset += buf.rebase.next * 8;
-                        }
-                    } while (buf.rebase.next != 0);
-                    break;
-                }
-                default:
-                    DEBUG_FIXUPS("unsupported pointer_format: %u\n", seg->pointer_format);
-                    break_loop = 1;
-                    break;
-                }
-                if (break_loop) {
-                    break;
-                }
-                break_loop = seg->page_start[++index] & DYLD_CHAINED_PTR_START_MULTI;
-            } // while (1) */
-        }
-    }
+            int32_t lib_ordinal;
+            const char *libname;
 #endif
+            switch (header->imports_format) {
+            case DYLD_CHAINED_IMPORT:
+                name_offset = import[ordinal].name_offset;
+                weak = import[ordinal].weak_import;
+#ifdef PLTHOOK_DEBUG_FIXUPS
+                if (import[ordinal].lib_ordinal >= (uint8_t)BIND_SPECIAL_DYLIB_WEAK_LOOKUP) {
+                    lib_ordinal = (int8_t)import[ordinal].lib_ordinal;
+                } else {
+                    lib_ordinal = (uint8_t)import[ordinal].lib_ordinal;
+                }
+#endif
+                break;
+            default:
+                DEBUG_FIXUPS("imports_format: %u\n", header->imports_format);
+                set_errmsg("unsupported imports format %u", header->imports_format);
+                rv = PLTHOOK_INTERNAL_ERROR;
+                goto cleanup;
+            }
+            bind_addr->name = symbol_pool + name_offset;
+            bind_addr->addr = (void**)fileoff_to_vmaddr(d,  entry.offset);
+            bind_addr->addend = entry.ptr.bind.addend;
+            bind_addr->weak = weak;
+#ifdef PLTHOOK_DEBUG_FIXUPS
+            switch (lib_ordinal) {
+            case BIND_SPECIAL_DYLIB_SELF:
+                libname = "this-image";
+                break;
+            case BIND_SPECIAL_DYLIB_MAIN_EXECUTABLE:
+                libname = "main-executable";
+                break;
+            case BIND_SPECIAL_DYLIB_FLAT_LOOKUP:
+                libname = "flat-namespace";
+                break;
+            case BIND_SPECIAL_DYLIB_WEAK_LOOKUP:
+                libname = "weak";
+                break;
+            default:
+                libname = "?";
+            }
+#endif
+            DEBUG_FIXUPS("        %-12s %-16s 0x%08llX              bind  %s/%s",
+                         segment_name_from_addr(d, entry.offset), section_name_from_addr(d, entry.offset), entry.offset, libname, symbol_pool + name_offset);
+            if (entry.ptr.bind.addend != 0) {
+                DEBUG_FIXUPS(" + 0x%X", entry.ptr.bind.addend);
+            }
+            if (weak) {
+                DEBUG_FIXUPS(" [weak-import]");
+            }
+            DEBUG_FIXUPS("\n");
+            num_binds++;
+        } else if (entry.ptr_format == DYLD_CHAINED_PTR_64_OFFSET && !entry.ptr.bind.bind) {
+            DEBUG_FIXUPS("        %-12s %-16s 0x%08llX            rebase  0x%08llX\n",
+                         segment_name_from_addr(d, entry.offset), section_name_from_addr(d, entry.offset), entry.offset, entry.ptr.rebase.target);
+        }
+    }
+    chained_fixups_iter_deinit(&iter);
     rv = 0;
 cleanup:
-#ifdef PLTHOOK_DEBUG_FIXUPS
-    if (fp != NULL) {
-        fclose(fp);
-    }
-#endif
+    chained_fixups_iter_deinit(&iter);
     if (rv != 0 && d->plthook) {
         free(d->plthook);
         d->plthook = NULL;
     }
     return rv;
 }
+
+#ifdef PLTHOOK_DEBUG_FIXUPS
+static const char *segment_name_from_addr(data_t *d, size_t addr)
+{
+    int i;
+    for (i = 0; i < d->num_segments; i++) {
+        const struct segment_command_64 *seg = d->segments[i];
+        if (seg->fileoff <= addr && addr < seg->fileoff + seg->filesize) {
+            return seg->segname;
+        }
+    }
+    return "?";
+}
+
+static const char *section_name_from_addr(data_t *d, size_t addr)
+{
+    int i;
+    for (i = 0; i < d->num_sections; i++) {
+        const struct section_64 *sec = d->sections[i];
+        if (sec->offset <= addr && addr < sec->offset + sec->size) {
+            return sec->sectname;
+        }
+    }
+    return "?";
+}
+#endif
 
 static int set_mem_prot(plthook_t *plthook)
 {
@@ -1061,48 +1033,83 @@ static int get_mem_prot(plthook_t *plthook, void *addr)
     return 0;
 }
 
+static uint8_t *fileoff_to_vmaddr(data_t *d, size_t offset)
+{
+    int i;
+    for (i = 0; i < d->num_segments; i++) {
+        const struct segment_command_64 *seg = d->segments[i];
+        if (seg->fileoff <= offset && offset < seg->fileoff + seg->filesize) {
+            return fileoff_to_vmaddr_in_segment(d, i, offset);
+        }
+    }
+    return NULL;
+}
+
 int plthook_enum(plthook_t *plthook, unsigned int *pos, const char **name_out, void ***addr_out)
 {
-    return plthook_enum_with_prot(plthook, pos, name_out, addr_out, NULL);
+    plthook_entry_t entry;
+    int rv = plthook_enum_entry(plthook, pos, &entry);
+    if (rv == 0) {
+        *name_out = entry.name;
+        *addr_out = entry.addr;
+    }
+    return rv;
 }
 
 int plthook_enum_with_prot(plthook_t *plthook, unsigned int *pos, const char **name_out, void ***addr_out, int *prot)
 {
-    if (*pos >= plthook->num_entries) {
-        *name_out = NULL;
-        *addr_out = NULL;
-        return EOF;
+    plthook_entry_t entry;
+    int rv = plthook_enum_entry(plthook, pos, &entry);
+    if (rv == 0) {
+        *name_out = entry.name;
+        *addr_out = entry.addr;
+        if (prot) {
+            *prot = entry.prot;
+        }
     }
-    *name_out = plthook->entries[*pos].name;
-    *addr_out = plthook->entries[*pos].addr;
-    (*pos)++;
-    if (prot != NULL) {
-        *prot = get_mem_prot(plthook, *addr_out);
+    return rv;
+}
+
+int plthook_enum_entry(plthook_t *plthook, unsigned int *pos, plthook_entry_t *entry)
+{
+    memset(entry, 0, sizeof(*entry));
+    while (*pos < plthook->num_entries) {
+        if (strcmp(plthook->entries[*pos].name, "__tlv_bootstrap") == 0) {
+            (*pos)++;
+            continue;
+        }
+        entry->name = plthook->entries[*pos].name;
+        entry->addr = plthook->entries[*pos].addr;
+        entry->addend = plthook->entries[*pos].addend;
+        entry->prot = get_mem_prot(plthook, entry->addr);
+        entry->weak = plthook->entries[*pos].weak;
+        (*pos)++;
+        return 0;
     }
-    return 0;
+    return EOF;
 }
 
 int plthook_replace(plthook_t *plthook, const char *funcname, void *funcaddr, void **oldfunc)
 {
-    fprintf(stderr, "in plthook_replace\n");
     size_t funcnamelen = strlen(funcname);
     unsigned int pos = 0;
-    const char *name;
-    void **addr;
+    plthook_entry_t entry;
     int rv;
 
     if (plthook == NULL) {
         set_errmsg("invalid argument: The first argument is null.");
         return PLTHOOK_INVALID_ARGUMENT;
     }
-    while ((rv = plthook_enum(plthook, &pos, &name, &addr)) == 0) {
+    while ((rv = plthook_enum_entry(plthook, &pos, &entry)) == 0) {
+        const char *name = entry.name;
+        void **addr = entry.addr;
         if (strncmp(name, funcname, funcnamelen) == 0) {
             if (name[funcnamelen] == '\0' || name[funcnamelen] == '$') {
                 goto matched;
             }
         }
         if (name[0] == '@') {
-            /* Oracle libclntsh.dylib imports 'read' as '@_read'. */
+            /* I doubt this code... */
             name++;
             if (strncmp(name, funcname, funcnamelen) == 0) {
                 if (name[funcnamelen] == '\0' || name[funcnamelen] == '$') {
@@ -1123,30 +1130,16 @@ matched:
         if (oldfunc) {
             *oldfunc = *addr;
         }
-        int prot = get_mem_prot(plthook, addr);
-        if (prot == 0) {
-            set_errmsg("Could not get the process memory permission at %p", addr);
-            return PLTHOOK_INTERNAL_ERROR;
-        }
-        if (!(prot & PROT_WRITE)) {
+        if (!(entry.prot & PROT_WRITE)) {
             size_t page_size = sysconf(_SC_PAGESIZE);
             void *base = (void*)((size_t)addr & ~(page_size - 1));
             if (mprotect(base, page_size, PROT_READ | PROT_WRITE) != 0) {
                 set_errmsg("Cannot change memory protection at address %p", base);
                 return PLTHOOK_INTERNAL_ERROR;
             }
-
-            Dl_info dli6;
-            if (dladdr((void*)addr, &dli6))
-                fprintf(stderr, "base of %s %s %p\n", funcname, dli6.dli_fname, dli6.dli_fbase);
-
-            //addr += 0x30;
-
-            fprintf(stderr, "replacing %p with %p at %p\n", *addr, funcaddr, addr);
             *addr = funcaddr;
-            mprotect(base, page_size, prot);
+            mprotect(base, page_size, entry.prot);
         } else {
-            fprintf(stderr, "replacing %p with %p at %p\n", *addr, funcaddr, addr);
             *addr = funcaddr;
         }
         return 0;
