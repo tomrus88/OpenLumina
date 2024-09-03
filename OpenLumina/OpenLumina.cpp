@@ -139,7 +139,7 @@ void* dlsym_hook(void* handle, const char* symbol)
         crypto.X509_free = (X509_free_fptr)dlsym(handle, "X509_free");
 
         if ((debug & IDA_DEBUG_LUMINA) != 0)
-            msg("openssl: BIO_s_mem %p BIO_new %p BIO_puts %p PEM_read_bio_X509 %p BIO_free %p X509_STORE_add_cert %p X509_free %p",
+            msg("openssl: BIO_s_mem %p BIO_new %p BIO_puts %p PEM_read_bio_X509 %p BIO_free %p X509_STORE_add_cert %p X509_free %p\n",
                 crypto.BIO_s_mem, crypto.BIO_new, crypto.BIO_puts, crypto.PEM_read_bio_X509, crypto.BIO_free, crypto.X509_STORE_add_cert, crypto.X509_free);
 
         if ((debug & IDA_DEBUG_LUMINA) != 0)
