@@ -47,7 +47,7 @@ static BOOL WINAPI CertAddEncodedCertificateToStore_hook(HCERTSTORE hCertStore, 
             DWORD pubKeySize = 2048;
             uint8_t pubKey[2048];
 
-            if (CryptStringToBinaryA(cert.c_str(), cert.size(), CRYPT_STRING_BASE64HEADER, pubKey, &pubKeySize, NULL, NULL))
+            if (CryptStringToBinaryA(cert.c_str(), (DWORD)cert.size(), CRYPT_STRING_BASE64HEADER, pubKey, &pubKeySize, NULL, NULL))
             {
                 // inject our root certificate to certificate store
                 if (CertAddEncodedCertificateToStore_orig(hCertStore, X509_ASN_ENCODING, pubKey, pubKeySize, CERT_STORE_ADD_USE_EXISTING, nullptr))
@@ -158,7 +158,6 @@ bool idaapi plugin_ctx_t::run(size_t arg)
     return true;
 }
 
-#if IDA_SDK_VERSION >= 900
 struct file_enumerator_impl : file_enumerator_t
 {
     file_enumerator_impl(plugin_ctx_t* ctx) : pc(ctx) {}
@@ -183,25 +182,6 @@ struct file_enumerator_impl : file_enumerator_t
 private:
     plugin_ctx_t* pc = nullptr;
 };
-#else
-int enum_hexrays_certificates_cb(const char* file, void* ud)
-{
-    if ((debug & IDA_DEBUG_LUMINA) != 0)
-        msg(PLUGIN_PREFIX "loading certificate: %s\n", file);
-
-    qstring cert;
-
-    if (load_certificate(cert, file))
-        ((plugin_ctx_t*)ud)->certificates.add(cert);
-    else
-        msg(PLUGIN_PREFIX "failed to load certificate file!\n");
-
-    if ((debug & IDA_DEBUG_LUMINA) != 0)
-        msg(PLUGIN_PREFIX "loaded certificate: %s\n", file);
-
-    return 0;
-}
-#endif
 
 bool plugin_ctx_t::init_hook()
 {
@@ -209,11 +189,11 @@ bool plugin_ctx_t::init_hook()
 
     char answer[QMAXPATH];
 
-#if IDA_SDK_VERSION >= 900
     file_enumerator_impl fe(this);
+#if IDA_SDK_VERSION >= 900
     enumerate_files(answer, sizeof(answer), ida_dir, "hexrays*.crt", fe);
 #else
-    enumerate_files(answer, sizeof(answer), ida_dir, "hexrays*.crt", enum_hexrays_certificates_cb, this);
+    enumerate_files2(answer, sizeof(answer), ida_dir, "hexrays*.crt", fe);
 #endif
 
     if (certificates.size() == 0)
@@ -291,7 +271,11 @@ static plugmod_t* idaapi init()
 
     s_plugin_ctx = ctx;
 
-    msg(PLUGIN_PREFIX "initialized (Version: " PLUGIN_VER " by TOM_RUS)\n");
+#if __EA64__
+    msg(PLUGIN_PREFIX "initialized (Version: " PLUGIN_VER " 64-bit by TOM_RUS)\n");
+#else
+    msg(PLUGIN_PREFIX "initialized (Version: " PLUGIN_VER " 32-bit by TOM_RUS)\n");
+#endif
 
     return ctx;
 }
