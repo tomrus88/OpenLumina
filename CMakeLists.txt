@@ -70,8 +70,8 @@ set(src
     "OpenLumina/OpenLumina.h"
 )
 
-if (IDA_90_BETA3)
-    message(STATUS "Compiling for IDA 9.0 Beta 3")
+if (IDA_90_STABLE)
+    message(STATUS "Compiling for IDA 9.0")
     add_ida_plugin(OpenLumina NOEA32 ${PROJECT_SOURCE_DIR}/OpenLumina/OpenLumina.cpp)
 else()
     add_ida_plugin(OpenLumina ${PROJECT_SOURCE_DIR}/OpenLumina/OpenLumina.cpp)
@@ -84,12 +84,6 @@ endif()
 ida_target_include_directories(OpenLumina PRIVATE ${IdaSdk_INCLUDE_DIRS})
 
 add_ida_library(OpenLuminaLib ${src})
-
-if (IDA_90_BETA2)
-    message(STATUS "Compiling for IDA 9.0 Beta 2")
-    target_compile_definitions(OpenLuminaLib_ea32 PUBLIC IDA_90_BETA2=1)
-    target_compile_definitions(OpenLuminaLib_ea64 PUBLIC IDA_90_BETA2=1)
-endif()
 
 if (WIN32)
     ida_target_link_libraries(OpenLumina crypt32.lib)
