@@ -7,7 +7,7 @@
       "inheritEnvironments": [ "msvc_x64_x64" ],
       "buildRoot": "${projectDir}\\out\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
-      "cmakeCommandArgs": "-DIdaSdk_ROOT_DIR=e:/ida90/idasdk90/",
+      "cmakeCommandArgs": "-DIdaSdk_ROOT_DIR=e:/ida90/idasdk90/ -DIDA_90_STABLE=1",
       "buildCommandArgs": "",
       "ctestCommandArgs": ""
     },
@@ -18,7 +18,7 @@
       "inheritEnvironments": [ "msvc_x64_x64" ],
       "buildRoot": "${projectDir}\\out\\build\\${name}",
       "installRoot": "${projectDir}\\out\\install\\${name}",
-      "cmakeCommandArgs": "-DIdaSdk_ROOT_DIR=e:/ida90/idasdk90/",
+      "cmakeCommandArgs": "-DIdaSdk_ROOT_DIR=e:/ida90/idasdk90/ -DIDA_90_STABLE=1",
       "buildCommandArgs": "",
       "ctestCommandArgs": ""
     }
