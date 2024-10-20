@@ -27,7 +27,7 @@ struct openssl_ctx
     BIO_free_fptr BIO_free;
     X509_STORE_add_cert_fptr X509_STORE_add_cert;
     X509_free_fptr X509_free;
-    SSL_CTX_load_verify_locations_ptr SSL_CTX_load_verify_locations;
+    SSL_CTX_load_verify_locations_fptr SSL_CTX_load_verify_locations;
 };
 
 #endif
