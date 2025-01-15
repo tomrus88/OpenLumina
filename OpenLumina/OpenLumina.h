@@ -7,7 +7,6 @@ struct X509;
 struct BIO_METHOD;
 struct BIO;
 struct pem_password_cb;
-struct SSL_CTX;
 
 typedef const BIO_METHOD* (*BIO_s_mem_fptr)(void);
 typedef BIO* (*BIO_new_fptr)(const BIO_METHOD* type);
@@ -16,7 +15,6 @@ typedef X509* (*PEM_read_bio_X509_fptr)(BIO* out, X509** x, pem_password_cb* cb,
 typedef int (*BIO_free_fptr)(BIO* a);
 typedef int (*X509_STORE_add_cert_fptr)(X509_STORE* ctx, X509* x);
 typedef void (*X509_free_fptr)(X509* a);
-typedef int (*SSL_CTX_load_verify_locations_fptr)(SSL_CTX* ctx, const char* CAfile, const char* CApath);
 
 struct openssl_ctx
 {
@@ -27,7 +25,6 @@ struct openssl_ctx
     BIO_free_fptr BIO_free;
     X509_STORE_add_cert_fptr X509_STORE_add_cert;
     X509_free_fptr X509_free;
-    SSL_CTX_load_verify_locations_fptr SSL_CTX_load_verify_locations;
 };
 
 #endif

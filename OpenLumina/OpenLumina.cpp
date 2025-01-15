@@ -109,13 +109,6 @@ int X509_STORE_add_cert_hook(X509_STORE* ctx, X509* x)
     return crypto.X509_STORE_add_cert(ctx, x);
 }
 
-int SSL_CTX_load_verify_locations_hook(SSL_CTX* ctx, const char* CAfile, const char* CApath)
-{
-    msg(PLUGIN_PREFIX "SSL_CTX_load_verify_locations_hook: %p '%s' '%s'\n", ctx, CAfile, CApath);
-
-    return crypto.SSL_CTX_load_verify_locations(ctx, CAfile, CApath);
-}
-
 static void* (*dlopen_orig)(const char* filename, int flags) = dlopen;
 
 void* dlopen_hook(const char* filename, int flags)
@@ -137,16 +130,13 @@ void* dlsym_hook(void* handle, const char* symbol)
 
     if (addr != nullptr && symbol != nullptr && strcmp(symbol, "X509_STORE_add_cert") == 0)
     {
-        crypto.BIO_s_mem = (BIO_s_mem_fptr)dlsym(handle, "BIO_s_mem");
-        crypto.BIO_new = (BIO_new_fptr)dlsym(handle, "BIO_new");
-        crypto.BIO_puts = (BIO_puts_fptr)dlsym(handle, "BIO_puts");
-        crypto.PEM_read_bio_X509 = (PEM_read_bio_X509_fptr)dlsym(handle, "PEM_read_bio_X509");
-        crypto.BIO_free = (BIO_free_fptr)dlsym(handle, "BIO_free");
+        crypto.BIO_s_mem = (BIO_s_mem_fptr)dlsym_orig(handle, "BIO_s_mem");
+        crypto.BIO_new = (BIO_new_fptr)dlsym_orig(handle, "BIO_new");
+        crypto.BIO_puts = (BIO_puts_fptr)dlsym_orig(handle, "BIO_puts");
+        crypto.PEM_read_bio_X509 = (PEM_read_bio_X509_fptr)dlsym_orig(handle, "PEM_read_bio_X509");
+        crypto.BIO_free = (BIO_free_fptr)dlsym_orig(handle, "BIO_free");
         crypto.X509_STORE_add_cert = (X509_STORE_add_cert_fptr)addr;
-        crypto.X509_free = (X509_free_fptr)dlsym(handle, "X509_free");
-        crypto.SSL_CTX_load_verify_locations = (SSL_CTX_load_verify_locations_fptr)dlsym(handle, "SSL_CTX_load_verify_locations");
-
-        msg("SSL_CTX_load_verify_locations %p\n", crypto.SSL_CTX_load_verify_locations);
+        crypto.X509_free = (X509_free_fptr)dlsym_orig(handle, "X509_free");
 
         if ((debug & IDA_DEBUG_LUMINA) != 0)
             msg("openssl: BIO_s_mem %p BIO_new %p BIO_puts %p PEM_read_bio_X509 %p BIO_free %p X509_STORE_add_cert %p X509_free %p\n",
@@ -156,12 +146,6 @@ void* dlsym_hook(void* handle, const char* symbol)
             msg(PLUGIN_PREFIX "returned %p for X509_STORE_add_cert\n", (void*)X509_STORE_add_cert_hook);
 
         return (void*)X509_STORE_add_cert_hook;
-    }
-
-    if (addr != nullptr && symbol != nullptr && strcmp(symbol, "SSL_CTX_load_verify_locations") == 0)
-    {
-        msg(PLUGIN_PREFIX "returned %p for SSL_CTX_load_verify_locations\n", (void*)SSL_CTX_load_verify_locations_hook);
-        return (void*)SSL_CTX_load_verify_locations_hook;
     }
 
     return addr;
