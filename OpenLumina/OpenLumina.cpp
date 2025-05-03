@@ -40,6 +40,31 @@ bool load_and_decode_certificate(bytevec_t* buffer, const char* certFilePath)
 
 static plugin_ctx_t* s_plugin_ctx = nullptr;
 
+static BOOL(WINAPI* TrueCertGetCertificateChain)(HCERTCHAINENGINE hChainEngine, PCCERT_CONTEXT pCertContext, LPFILETIME pTime, HCERTSTORE hAdditionalStore, PCERT_CHAIN_PARA pChainPara, DWORD dwFlags, LPVOID pvReserved, PCCERT_CHAIN_CONTEXT* ppChainContext) = CertGetCertificateChain;
+
+static BOOL WINAPI HookedCertGetCertificateChain(HCERTCHAINENGINE hChainEngine, PCCERT_CONTEXT pCertContext, LPFILETIME pTime, HCERTSTORE hAdditionalStore, PCERT_CHAIN_PARA pChainPara, DWORD dwFlags, LPVOID pvReserved, PCCERT_CHAIN_CONTEXT* ppChainContext)
+{
+	static bool firstCall = true;
+
+	if ((debug & IDA_DEBUG_LUMINA) != 0)
+		msg(PLUGIN_PREFIX "HookedCertGetCertificateChain called\n");
+
+	BOOL result = TrueCertGetCertificateChain(hChainEngine, pCertContext, pTime, hAdditionalStore, pChainPara, dwFlags, pvReserved, ppChainContext);
+
+	if (firstCall && result && ppChainContext && *ppChainContext)
+	{
+		if ((debug & IDA_DEBUG_LUMINA) != 0)
+			msg(PLUGIN_PREFIX "Overriding dwErrorStatus to 0x10000\n");
+
+		PCERT_CHAIN_CONTEXT pChainContext = const_cast<PCERT_CHAIN_CONTEXT>(*ppChainContext);
+		pChainContext->TrustStatus.dwErrorStatus = 0x10000;
+	}
+
+	firstCall = !firstCall;
+
+	return result;
+}
+
 static BOOL(WINAPI* TrueCertAddEncodedCertificateToStore)(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext) = CertAddEncodedCertificateToStore;
 
 static BOOL WINAPI HookedCertAddEncodedCertificateToStore(HCERTSTORE hCertStore, DWORD dwCertEncodingType, const BYTE* pbCertEncoded, DWORD cbCertEncoded, DWORD dwAddDisposition, PCCERT_CONTEXT* ppCertContext)
@@ -94,6 +119,7 @@ bool plugin_ctx_t::init_hook()
 
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
+    DetourAttach(&(PVOID&)TrueCertGetCertificateChain, HookedCertGetCertificateChain);
     DetourAttach(&(PVOID&)TrueCertAddEncodedCertificateToStore, HookedCertAddEncodedCertificateToStore);
     DetourTransactionCommit();
 
@@ -107,6 +133,7 @@ plugin_ctx_t::~plugin_ctx_t()
 {
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());
+    DetourDetach(&(PVOID&)TrueCertGetCertificateChain, HookedCertGetCertificateChain);
     DetourDetach(&(PVOID&)TrueCertAddEncodedCertificateToStore, HookedCertAddEncodedCertificateToStore);
     DetourTransactionCommit();
 }
