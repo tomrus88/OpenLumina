@@ -70,6 +70,31 @@ static BOOL WINAPI CertAddEncodedCertificateToStore_hook(HCERTSTORE hCertStore, 
     // continue adding official root certificate to certificate store 
     return CertAddEncodedCertificateToStore_orig(hCertStore, dwCertEncodingType, pbCertEncoded, cbCertEncoded, dwAddDisposition, ppCertContext);
 }
+
+static BOOL(WINAPI* CertGetCertificateChain_orig)(HCERTCHAINENGINE hChainEngine, PCCERT_CONTEXT pCertContext, LPFILETIME pTime, HCERTSTORE hAdditionalStore, PCERT_CHAIN_PARA pChainPara, DWORD dwFlags, LPVOID pvReserved, PCCERT_CHAIN_CONTEXT* ppChainContext) = CertGetCertificateChain;
+
+static BOOL WINAPI CertGetCertificateChain_hook(HCERTCHAINENGINE hChainEngine, PCCERT_CONTEXT pCertContext, LPFILETIME pTime, HCERTSTORE hAdditionalStore, PCERT_CHAIN_PARA pChainPara, DWORD dwFlags, LPVOID pvReserved, PCCERT_CHAIN_CONTEXT* ppChainContext)
+{
+    static bool firstCall = true;
+
+    if ((debug & IDA_DEBUG_LUMINA) != 0)
+        msg(PLUGIN_PREFIX "CertGetCertificateChain_hook called\n");
+
+    BOOL result = CertGetCertificateChain_orig(hChainEngine, pCertContext, pTime, hAdditionalStore, pChainPara, dwFlags, pvReserved, ppChainContext);
+
+    if (firstCall && result && ppChainContext && *ppChainContext)
+    {
+        if ((debug & IDA_DEBUG_LUMINA) != 0)
+            msg(PLUGIN_PREFIX "Overriding dwErrorStatus to 0x10000\n");
+
+        PCERT_CHAIN_CONTEXT pChainContext = const_cast<PCERT_CHAIN_CONTEXT>(*ppChainContext);
+        pChainContext->TrustStatus.dwErrorStatus = 0x10000;
+    }
+
+    firstCall = !firstCall;
+
+    return result;
+}
 #endif
 
 #if __LINUX__ || __MAC__
@@ -210,13 +235,18 @@ bool plugin_ctx_t::init_hook()
     plthook_t* plthook;
 
     if (plthook_open(&plthook, IDA_LIB_NAME) != 0) {
-        msg("plthook_open error: %s\n", plthook_error());
+        msg(PLUGIN_PREFIX "plthook_open error: %s\n", plthook_error());
         return false;
     }
 
 #if __NT__
     if (plthook_replace(plthook, "CertAddEncodedCertificateToStore", (void*)CertAddEncodedCertificateToStore_hook, NULL) != 0) {
-        msg("plthook_replace error: %s\n", plthook_error());
+        msg(PLUGIN_PREFIX "plthook_replace CertAddEncodedCertificateToStore error: %s\n", plthook_error());
+        plthook_close(plthook);
+        return false;
+    }
+    if (plthook_replace(plthook, "CertGetCertificateChain", (void*)CertGetCertificateChain_hook, NULL) != 0) {
+        msg(PLUGIN_PREFIX "plthook_replace CertGetCertificateChain error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
     }
@@ -224,12 +254,12 @@ bool plugin_ctx_t::init_hook()
 
 #if __LINUX__ || __MAC__
     if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, NULL) != 0) {
-        msg("plthook_replace error: %s\n", plthook_error());
+        msg(PLUGIN_PREFIX "plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
     }
     if (plthook_replace(plthook, "dlsym", (void*)dlsym_hook, NULL) != 0) {
-        msg("plthook_replace error: %s\n", plthook_error());
+        msg(PLUGIN_PREFIX "plthook_replace error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
     }
