@@ -254,12 +254,12 @@ bool plugin_ctx_t::init_hook()
 
 #if __LINUX__ || __MAC__
     if (plthook_replace(plthook, "dlopen", (void*)dlopen_hook, NULL) != 0) {
-        msg(PLUGIN_PREFIX "plthook_replace error: %s\n", plthook_error());
+        msg(PLUGIN_PREFIX "plthook_replace dlopen error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
     }
     if (plthook_replace(plthook, "dlsym", (void*)dlsym_hook, NULL) != 0) {
-        msg(PLUGIN_PREFIX "plthook_replace error: %s\n", plthook_error());
+        msg(PLUGIN_PREFIX "plthook_replace dlsym error: %s\n", plthook_error());
         plthook_close(plthook);
         return false;
     }
