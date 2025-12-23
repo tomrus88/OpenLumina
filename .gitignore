@@ -1,4 +1,5 @@
 .vs/*
 OpenLumina/x64/*
 OpenLumina/*.user
+out/*
 x64/*

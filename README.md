@@ -5,16 +5,14 @@ IDA plugin that allows connecting to third party Lumina servers.
 ## Getting started
 
 1. Build or download precompiled version of the plugin and put it into your IDA\plugins directory
-2. Copy hexrays.crt certificate file provided by Lumina server owner to your IDA install directory
+2. Copy your hexrays*.crt certificate file(s) provided by Lumina server owner to your IDA install directory
 
 ## Building plugin
 
-1. Visual Studio 2022 is required for building plugin
-2. vcpkg package manager required if you don't want to configure dependencies yourself manually
-3. Install Microsoft Detours package through vcpkg `vcpkg install detours`
-4. Configure paths to your extracted IDA SDK directory and optionally your IDA install directory in PropertySheet.props file
-5. Open OpenLumina.sln in Visual Studio 2022 and build the plugin
-6. Copy compiled plugin binaries to your IDA\plugins directory if you haven't configured your IDA install directory in step 4 above
+1. CMake is required for building plugin. You can use CMake version bundled with Visual Studio 2022 (CMake 3.29.5 as of 02.09.2024)
+2. Configure path to your extracted IDA SDK directory in build_win.cmd/build_linux.sh/build_mac.sh file
+3. Run build_win.cmd/build_linux.sh/build_mac.sh (on Windows it must be run from VS Developer Command Prompt for VS2022)
+3. Copy compiled plugin binaries to your <IDA_INSTALL>\plugins directory
 
 ## Generating TLS certificates for your own Lumina server
 

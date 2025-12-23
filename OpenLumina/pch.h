@@ -7,10 +7,20 @@
 #ifndef PCH_H
 #define PCH_H
 
+//#undef __NT__
+//#define __LINUX__ 1
+//#define __MAC__ 1
+
+//#define USE_STANDARD_FILE_FUNCTIONS
+
 // add headers that you want to pre-compile here
 #include "framework.h"
 
 #include <cstdio>
+
+#if __LINUX__ || __MAC__
+#include <dlfcn.h>
+#endif
 
 #include <ida.hpp>
 #include <idp.hpp>
@@ -18,8 +28,10 @@
 #include <kernwin.hpp>
 #include <diskio.hpp>
 
-#include "detours/detours.h"
+//#include "detours/detours.h"
+#include "plthook/plthook.h"
 
 #include "plugin_ctx.h"
+#include "OpenLumina.h"
 
 #endif //PCH_H

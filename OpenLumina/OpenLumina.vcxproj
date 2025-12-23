@@ -187,6 +187,7 @@
   <ItemGroup>
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="plthook\plthook.h" />
     <ClInclude Include="plugin_ctx.h" />
   </ItemGroup>
   <ItemGroup>
@@ -197,6 +198,12 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='ida64 Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='ida32 Release|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='ida64 Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="plthook\plthook_win32.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='ida32 Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='ida64 Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='ida32 Release|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='ida64 Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
