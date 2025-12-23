@@ -80,7 +80,6 @@ jobs:
         run: |
           mkdir -p artifacts
           cp -v ./build/${{ matrix.os.mask }} artifacts/
-          cp -v ./bin/plugins/*.txt artifacts/
           cp -v ida-plugin.json artifacts/
 
       - name: Upload artifacts
