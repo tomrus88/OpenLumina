@@ -1,6 +1,10 @@
 OpenLumina
 
-IDA plugin that allows connecting to third party Lumina servers.
+IDA plugin that allows connecting to third party Lumina servers such as:
+
+1. Lumen: guest:guest@lumen.abda.nl:1235
+2. Int: guest:guest@ida.int.mov:1234
+3. Your own private lumina
 
 ## Getting started
 
