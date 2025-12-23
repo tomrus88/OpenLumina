@@ -2,11 +2,11 @@ name: build
 
 on:
   push:
-    branches: [ "cmake-build" ]
+    branches: [ "main" ]
     tags:
       - "v*"
   pull_request:
-    branches: [ "cmake-build" ]
+    branches: [ "main" ]
 
 permissions: read-all
 
