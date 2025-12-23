@@ -1,0 +1,16 @@
+{
+  "IDAMetadataDescriptorVersion": 1,
+  "plugin": {
+    "name": "OpenLumina",
+    "entryPoint": "OpenLumina",
+    "version": "9.2",
+    "idaVersions": ">=9.2",
+    "categories": ["collaboration-and-productivity", "other"],
+    "description" : "IDA Pro plugin that allows connecting to third party Lumina servers",
+    "license": "MIT",
+    "logoPath": "logo.png",
+    "urls": {
+      "repository": "https://github.com/tomrus88/OpenLumina"
+    }
+  }
+}
