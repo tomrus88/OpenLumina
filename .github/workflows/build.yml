@@ -36,8 +36,8 @@ jobs:
             name: macos
             mask: "*.dylib"
         ida:
-          - version: "9.2"
-            ver: "92"
+          - version: "9.3"
+            ver: "93"
 
     steps:
       - name: Setup MSBuild
@@ -100,7 +100,7 @@ jobs:
       fail-fast: false
       matrix:
         ida:
-          - version: "9.2"
+          - version: "9.3"
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
